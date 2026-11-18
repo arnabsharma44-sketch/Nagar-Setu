@@ -66,7 +66,7 @@ export function AppShell({
           </div>
           <nav aria-label={`${tone} navigation`} className="mt-2 space-y-0.5">
             {nav.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const active = pathname === item.href || pathname.startsWith(item.href + "/");
               const activeClass =
                 tone === "command"
                   ? "bg-sky-500/15 text-sky-200"
@@ -155,7 +155,7 @@ export function AppShell({
                   key={item.href}
                   href={item.href}
                   className={`whitespace-nowrap rounded-full px-3 py-1 text-xs ${
-                    pathname === item.href
+                    pathname === item.href || pathname.startsWith(item.href + "/")
                       ? tone === "command"
                         ? "bg-sky-500/20 text-sky-200"
                         : "bg-blue-100 text-blue-800"
