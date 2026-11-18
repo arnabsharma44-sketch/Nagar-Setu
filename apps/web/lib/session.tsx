@@ -39,7 +39,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           : "Unable to load your session.";
       setError(message);
       setSession(null);
-      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      // Only redirect on authentication errors (401), not network errors
+      if (
+        typeof window !== "undefined" &&
+        !window.location.pathname.startsWith("/login") &&
+        err instanceof ApiError &&
+        err.status === 401
+      ) {
         window.location.href = "/login";
       }
     } finally {

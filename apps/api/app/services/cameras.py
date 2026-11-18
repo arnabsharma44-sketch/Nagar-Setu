@@ -286,7 +286,6 @@ def start_rtsp_live_session(
     is handled by the worker via the RTSP adapter.
     """
     from ai_engine.video.rtsp_adapter import (
-        RtspAuthorizationError,
         check_rtsp_authorization,
         resolve_rtsp_secret,
     )
@@ -311,7 +310,7 @@ def start_rtsp_live_session(
     try:
         credentials = resolve_rtsp_secret(camera.secret_reference)
     except Exception as e:
-        raise ValidationError(f"Failed to resolve RTSP credentials: {e}", code="SECRET_RESOLUTION_FAILED")
+        raise ValidationError(f"Failed to resolve RTSP credentials: {e}", code="SECRET_RESOLUTION_FAILED") from e
 
     host = credentials.get("host")
     if not host:
@@ -323,7 +322,7 @@ def start_rtsp_live_session(
     try:
         check_rtsp_authorization(host, cidr)
     except Exception as e:
-        raise ValidationError(str(e), code="RTSP_AUTHORIZATION_FAILED")
+        raise ValidationError(str(e), code="RTSP_AUTHORIZATION_FAILED") from e
 
     # If we get here, RTSP is authorized. Create a CONNECTED session.
     live = LiveStreamSession(

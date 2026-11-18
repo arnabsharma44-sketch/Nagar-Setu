@@ -111,9 +111,23 @@ def _rules(config: dict[str, Any]) -> RuleConfig:
     )
 
 
+# Module-level cached session factory for progress updates to avoid repeated factory creation
+_progress_session_factory = None
+
+
+def _get_progress_session_factory():
+    global _progress_session_factory
+    if _progress_session_factory is None:
+        _progress_session_factory = app_session_factory()
+    return _progress_session_factory
+
+
 def _update_progress(job_id: uuid.UUID, organization_id: uuid.UUID, progress: int, stage: str) -> None:
-    """Progress is informational; each update is its own short transaction."""
-    factory = app_session_factory()
+    """Progress is informational; each update is its own short transaction.
+    
+    Lease is extended on every progress update to prevent expiration during long jobs.
+    """
+    factory = _get_progress_session_factory()
     session = factory()
     try:
         session.begin()
@@ -122,6 +136,7 @@ def _update_progress(job_id: uuid.UUID, organization_id: uuid.UUID, progress: in
         if job is not None and job.status == JobStatus.RUNNING:
             job.progress = progress
             job.stage = JobStage(stage) if stage in JobStage._value2member_map_ else job.stage
+            # Extend lease on every progress update to prevent expiration during long jobs
             job.lease_expires_at = datetime.now(UTC) + timedelta(seconds=settings.job_lease_seconds)
         session.commit()
     except Exception:  # pragma: no cover - progress must never fail a job
@@ -158,7 +173,7 @@ def _fail(job_id: uuid.UUID, organization_id: uuid.UUID, code: str, message: str
             job.lease_expires_at = None
         else:
             job.status = JobStatus.FAILED
-            job.stage = JobStage.QUEUED
+            job.stage = JobStage.FAILED
             job.completed_at = datetime.now(UTC)
             job.lease_owner = None
             job.lease_expires_at = None

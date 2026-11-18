@@ -43,7 +43,9 @@ RULES_VERSION = "1.0.0"
 def _job_idempotency_key(video_id: uuid.UUID) -> str:
     raw = (
         f"{video_id}|{settings.detector_backend}|{settings.yolo_weights}|"
-        f"{RULES_VERSION}|{settings.frame_sample_fps}"
+        f"{RULES_VERSION}|{settings.frame_sample_fps}|{settings.tracker}|"
+        f"{settings.near_miss_proximity_ratio}|{settings.near_miss_convergence_window_seconds}|"
+        f"{settings.near_miss_min_track_frames}|{settings.yolo_confidence_threshold}"
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -105,7 +107,10 @@ def create_upload_session(ctx: RequestContext, payload: UploadUrlRequest) -> tup
 
 def complete_upload(ctx: RequestContext, video_id: uuid.UUID) -> Video:
     ctx.require("video:upload")
-    video = ctx.session.get(Video, video_id)
+    # Use SELECT FOR UPDATE to prevent race conditions
+    video = ctx.session.execute(
+        select(Video).where(Video.id == video_id).with_for_update()
+    ).scalar_one_or_none()
     if video is None:
         raise NotFound("Video not found.")
     if video.status != VideoStatus.PENDING_UPLOAD:

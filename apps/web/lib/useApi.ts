@@ -14,7 +14,7 @@ export interface ApiState<T> {
 export function useApi<T>(path: string | null): ApiState<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(Boolean(path));
+  const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
   const mounted = useRef(true);
 
@@ -26,13 +26,20 @@ export function useApi<T>(path: string | null): ApiState<T> {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (!path) {
-      setLoading(false);
+      if (!cancelled) {
+        setLoading(false);
+        setData(null);
+        setError(null);
+      }
       return;
     }
-    let cancelled = false;
+
     setLoading(true);
     setError(null);
+
     api
       .get<T>(path)
       .then((result) => {
@@ -45,6 +52,7 @@ export function useApi<T>(path: string | null): ApiState<T> {
       .finally(() => {
         if (!cancelled && mounted.current) setLoading(false);
       });
+
     return () => {
       cancelled = true;
     };
