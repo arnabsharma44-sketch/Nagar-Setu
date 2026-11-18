@@ -149,13 +149,22 @@ class S3StorageBackend:
         except ImportError as exc:  # pragma: no cover - dependency is pinned
             raise DependencyUnavailable("Object storage client is unavailable.") from exc
 
+        client_kwargs = {
+            "aws_access_key_id": settings.s3_access_key_id,
+            "aws_secret_access_key": settings.s3_secret_access_key,
+            "region_name": settings.s3_region,
+            "config": Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+        }
         self._client = boto3.client(
-            "s3",
-            endpoint_url=settings.s3_endpoint_url,
-            aws_access_key_id=settings.s3_access_key_id,
-            aws_secret_access_key=settings.s3_secret_access_key,
-            region_name=settings.s3_region,
-            config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+            "s3", endpoint_url=settings.s3_endpoint_url, **client_kwargs
+        )
+        # Inside compose the bucket is reached at minio:9000, which a browser cannot
+        # resolve. Presigned URLs are therefore signed against a separately
+        # configured public endpoint when one is set.
+        self._presign_client = (
+            boto3.client("s3", endpoint_url=settings.s3_public_endpoint_url, **client_kwargs)
+            if settings.s3_public_endpoint_url
+            else self._client
         )
         self.bucket = settings.s3_bucket
 
@@ -206,7 +215,7 @@ class S3StorageBackend:
 
     def upload_url(self, *, key: str, organization_id: uuid.UUID, content_type: str) -> str:
         try:
-            return self._client.generate_presigned_url(
+            return self._presign_client.generate_presigned_url(
                 "put_object",
                 Params={"Bucket": self.bucket, "Key": key, "ContentType": content_type},
                 ExpiresIn=settings.signed_url_ttl_seconds,
@@ -228,7 +237,7 @@ class S3StorageBackend:
         if content_type:
             params["ResponseContentType"] = content_type
         try:
-            return self._client.generate_presigned_url(
+            return self._presign_client.generate_presigned_url(
                 "get_object", Params=params, ExpiresIn=settings.signed_url_ttl_seconds
             )
         except Exception as exc:

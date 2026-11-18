@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     storage_backend: Literal["local", "s3"] = "local"
     local_storage_dir: str = "./storage"
     s3_endpoint_url: str = "http://localhost:9000"
+    # Browser-reachable endpoint used to sign URLs. Defaults to s3_endpoint_url.
+    s3_public_endpoint_url: str | None = None
     s3_access_key_id: str = ""
     s3_secret_access_key: str = ""
     s3_bucket: str = "roadguard-private"

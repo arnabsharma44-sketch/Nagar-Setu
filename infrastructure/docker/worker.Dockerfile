@@ -28,4 +28,4 @@ USER roadguard
 
 WORKDIR /app
 
-CMD ["python", "-m", "ai_engine.workers.celery_app", "worker", "--loglevel=INFO", "--concurrency=1", "--pool=solo"]
+CMD ["celery", "-A", "ai_engine.workers.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=1", "--pool=solo"]

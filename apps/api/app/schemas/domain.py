@@ -398,7 +398,7 @@ class ProcessVideoRequest(BaseModel):
 
 
 class StepUpRequest(BaseModel):
-    """Explicit acknowledgement required for live camera simulation."""
+    """Explicit acknowledgement required for live camera operations."""
 
     confirm: bool = False
 

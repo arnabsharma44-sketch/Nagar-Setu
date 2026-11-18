@@ -159,6 +159,35 @@ def start_simulated_live(
     )
 
 
+@router.post("/{camera_id}/live/rtsp", response_model=Envelope[dict])
+def start_rtsp_live(
+    camera_id: uuid.UUID,
+    payload: StepUpRequest,
+    request: Request,
+    ctx: RequestContext = CurrentContext,
+) -> Envelope[dict]:
+    ctx.require("camera:manage")
+    session_row = camera_service.start_rtsp_live_session(
+        ctx.session,
+        organization_id=ctx.organization_id,
+        actor_id=ctx.user_id,
+        actor_label=ctx.principal.email,
+        camera_id=camera_id,
+        confirmed=payload.confirm,
+        request_id=ctx.request_id,
+    )
+    return ok(
+        {
+            "session_id": str(session_row.id),
+            "status": session_row.status.value,
+            "is_simulated": session_row.is_simulated,
+            "mode": session_row.mode,
+            "detail": session_row.detail,
+        },
+        request,
+    )
+
+
 @router.post("/{camera_id}/live/stop", response_model=Envelope[dict])
 def stop_live(
     camera_id: uuid.UUID, request: Request, ctx: RequestContext = CurrentContext

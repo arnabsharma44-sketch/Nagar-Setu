@@ -268,6 +268,101 @@ def start_simulated_session(
         data={"camera_id": str(camera.id), "status": CameraConnectionStatus.SIMULATED.value},
     )
     return live
+def start_rtsp_live_session(
+    session: Session,
+    *,
+    organization_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    actor_label: str,
+    camera_id: uuid.UUID,
+    confirmed: bool,
+    request_id: str | None,
+) -> LiveStreamSession:
+    """Start a live RTSP session for an authorized camera.
+
+    This function is only called when LIVE_CCTV_ENABLED=true and the camera
+    host is in the allowlist. It validates authorization and creates a
+    LiveStreamSession with CONNECTED status. The actual frame ingestion
+    is handled by the worker via the RTSP adapter.
+    """
+    from ai_engine.video.rtsp_adapter import (
+        RtspAuthorizationError,
+        check_rtsp_authorization,
+        resolve_rtsp_secret,
+    )
+
+    camera = session.get(Camera, camera_id)
+    if camera is None:
+        raise NotFound("Camera not found.")
+    if camera.source_type != CameraSourceType.RTSP:
+        raise ValidationError("Camera is not configured for RTSP.", code="INVALID_SOURCE_TYPE")
+    if not confirmed:
+        raise ValidationError(
+            "Confirm that you are authorized to connect to this live camera feed.",
+            code="RTSP_CONFIRMATION_REQUIRED",
+        )
+    if not camera.secret_reference:
+        raise ValidationError(
+            "Camera has no secret reference configured. Cannot connect to RTSP stream.",
+            code="MISSING_SECRET_REFERENCE",
+        )
+
+    # Resolve credentials to get host for authorization check
+    try:
+        credentials = resolve_rtsp_secret(camera.secret_reference)
+    except Exception as e:
+        raise ValidationError(f"Failed to resolve RTSP credentials: {e}", code="SECRET_RESOLUTION_FAILED")
+
+    host = credentials.get("host")
+    if not host:
+        raise ValidationError("RTSP secret must contain 'host' field.", code="INVALID_SECRET_FORMAT")
+
+    cidr = credentials.get("cidr")
+
+    # Authorization check (host allowlist, CIDR allowlist, LIVE_CCTV_ENABLED)
+    try:
+        check_rtsp_authorization(host, cidr)
+    except Exception as e:
+        raise ValidationError(str(e), code="RTSP_AUTHORIZATION_FAILED")
+
+    # If we get here, RTSP is authorized. Create a CONNECTED session.
+    live = LiveStreamSession(
+        organization_id=organization_id,
+        camera_id=camera.id,
+        status=LiveSessionStatus.CONNECTED,
+        mode="rtsp",
+        is_simulated=False,
+        started_at=datetime.now(UTC),
+        started_by=actor_id,
+        detail=f"RTSP stream from {credentials.get('host')} - frame ingestion handled by worker",
+    )
+    session.add(live)
+    camera.connection_status = CameraConnectionStatus.CONNECTED
+    camera.last_seen_at = datetime.now(UTC)
+    session.flush()
+
+    record_audit(
+        session,
+        organization_id=organization_id,
+        actor_id=actor_id,
+        actor_label=actor_label,
+        action="camera.rtsp_live_started",
+        entity_type="camera",
+        entity_id=camera.id,
+        request_id=request_id,
+        summary=f"Authorized RTSP live session started for {camera.camera_code}.",
+        metadata={"host": credentials.get("host"), "mode": "rtsp"},
+    )
+
+    publish_event(
+        organization_id=organization_id,
+        event_type="camera.status_changed",
+        resource_type="camera",
+        resource_id=camera.id,
+        data={"camera_id": str(camera.id), "status": CameraConnectionStatus.CONNECTED.value},
+    )
+
+    return live
 
 
 def stop_live_session(

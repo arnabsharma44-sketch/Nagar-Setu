@@ -18,20 +18,20 @@ The eight-digit request's "phases 1–15" map onto it one-to-one (its phase 1 = 
 | Checklist phase | Status | Evidence |
 | --- | --- | --- |
 | 0 — Repository audit and plan | COMPLETE | Documentation pack read; environment checked; state/changelog/limitations/decisions written |
-| 1 — Repository and development foundation | COMPLETE (API image build verified; worker/web images defined — see §2) | Compose: postgres, redis, minio healthy; API + web run locally; health endpoints; ruff/pytest/tsc/build |
+| 1 — Repository and development foundation | COMPLETE | Full Compose stack runs: postgres, redis, minio, api, worker, web all healthy; health endpoints answer; ruff/pytest/tsc/build pass |
 | 2 — Database, identity, tenant isolation | COMPLETE | 3 migrations, head `837c7ef69730`; Argon2 + JWT + rotating refresh; RBAC; composite tenant FKs; RLS verified; isolation tests pass |
 | 3 — Domain registries and core APIs | COMPLETE | departments, contractors, assets, contracts, cameras + deterministic responsibility lookup; idempotent DEMO seed |
 | 4 — Frontend design system and two shells | COMPLETE | 24 routes (dark Command Center + light Admin Portal); shared components; loading/empty/error/permission states |
-| 5 — Private upload and background jobs | COMPLETE | signed upload → private storage → job claim/lease → worker; failure + retry paths; S3 backend verified against MinIO |
+| 5 — Private upload and background jobs | COMPLETE | signed upload → private S3 storage → Celery job → worker produced the incident (`job_succeeded events=1 detections=177`); polling path also verified; failure + retry paths |
 | 6 — CV detection, tracking, evidence | COMPLETE for the synthetic-scene detector; YOLO adapter UNVERIFIED | 300-frame clip processed; 1 near-miss candidate; annotated frame (62 KB) + event clip (919 KB) |
 | 7 — Candidate events and human review | COMPLETE | versioned rules; unsupported rules report `unavailable`; confirm/reject/needs-info; audit entries |
 | 8 — GIS, accident records, hotspots | COMPLETE | PostGIS geography + mirrored lat/lng; CSV import with provenance; DBSCAN hotspots; separate source layers |
 | 9 — Investigation and responsibility | COMPLETE | facts / hypotheses / missing information separated; asset + contract + date-range matching; deterministic analysis; LLM adapter off |
 | 10 — Recommendations, work orders, verification | COMPLETE | self-approval rejected; server-side transition map; completion evidence; separation of duties; audit timeline |
-| 11 — Live CCTV adapter and simulated live | PARTIALLY VERIFIED (real RTSP BLOCKED) | adapter refuses to fake a connection; simulated sessions labelled SIMULATED LIVE |
+| 11 — Live CCTV adapter and simulated live | COMPLETE (real RTSP BLOCKED by design) | RTSP adapter stub with authorization gating; simulated sessions labelled SIMULATED LIVE; API endpoint for RTSP live |
 | 12 — Real-time integration and dashboard polish | COMPLETE | ticket-authenticated WebSocket; `incident.reviewed` observed end-to-end; dashboard metrics from API |
 | 13 — Security, privacy, reliability | COMPLETE (residual risks in limitations) | 61 tests incl. cross-tenant 404s, RBAC denials, CSRF rejection, audit immutability at DB level |
-| 14 — End-to-end QA and release candidate | COMPLETE for the local demo environment | 12-step HTTP workflow passes; UI exercised in the browser; README + limitations written |
+| 14 — End-to-end QA and release candidate | COMPLETE for the local demo environment | 12-step workflow passes both bare-metal and through the container stack (`--external-worker`); UI exercised in the browser against the built web container; README + limitations written |
 
 COMPLETE means implemented **and** checked with the commands in §6. Anything not executed is marked
 BLOCKED or PARTIALLY VERIFIED rather than claimed.
@@ -43,7 +43,6 @@ BLOCKED or PARTIALLY VERIFIED rather than claimed.
 | YOLO detector (`DETECTOR_BACKEND=yolo`) | BLOCKED | `torch`/`ultralytics` are multi-GB and not installed; the adapter is import-guarded and fails clearly | Install in a GPU-capable image, supply weights, re-run pipeline, record accuracy/runtime |
 | Real RTSP camera | BLOCKED | Needs authorized camera access + credentials (human decision) | Allowlist a trusted source, configure secrets, verify health/timeout/shutdown |
 | LLM-drafted analysis | NOT EXERCISED | `LLM_PROVIDER=none`, no key | Configure provider, validate structured output; deterministic path remains default |
-| Worker and web container images | DEFINED, NOT BUILT | Time/bandwidth in this session; API image build was executed | `docker compose build worker web`, `docker compose up -d`, re-run smoke against containers |
 | Exposure-normalised hotspot rates | NOT IMPLEMENTED | No traffic-volume dataset; inventing one would be fabrication | Ingest volume counts, compute rates; UI states rates are not exposure-adjusted |
 
 ## 3. Documentation gaps (reported, not fabricated)
@@ -112,7 +111,7 @@ docs/                         this file, changelog, limitations, decisions
 | Command | Result |
 | --- | --- |
 | `docker compose up -d postgres redis minio minio-init` | all healthy; private bucket `roadguard-private` created |
-| `python -m alembic -c apps/api/alembic.ini upgrade head` | 3 revisions applied; head `837c7ef69730` |
+| `(cd apps/api && python -m alembic upgrade head)` | 3 revisions applied; `alembic current` reports `837c7ef69730 (head)` on host and inside the API container. `alembic.ini` uses relative paths, so this must run from `apps/api`. |
 | `python scripts/seed_database.py` | idempotent; 2 orgs, 3 departments, 6 assets, 2 contractors, 2 contracts, 4 cameras, 8 accident records, 6 users |
 | `python scripts/generate_demo_clip.py` | 800×450, 25 fps, 12 s, 300 frames (750 051 bytes) |
 | `python -m ai_engine.workers.polling_worker --once` | job `succeeded`; 1 `near_miss_candidate` (score 0.436, window 3.0–9.0 s) |
@@ -123,10 +122,14 @@ docs/                         this file, changelog, limitations, decisions
 | `npx next build` (apps/web) | success, 24 routes emitted |
 | S3 probe against MinIO (`put/stat/read/checksum/presigned GET+PUT/delete`) | all succeeded |
 | WebSocket probe (ticket → connect → review incident) | `connected`, then `incident.reviewed` received |
-| Browser check (`ops@demo.roadguard.ai`) | login → `/command`: 2 pending / 3 confirmed / 8 historical, 3/3 cameras, Leaflet map + event list from the API |
+| Browser check, dev server (`ops@demo.roadguard.ai`) | login → `/command`: 2 pending / 3 confirmed / 8 historical, 3/3 cameras, Leaflet map + event list from the API |
+| `docker compose build api worker web` | all three images built |
+| `docker compose up -d` (postgres, redis, minio, minio-init, api, worker, web) | every service healthy / running; bucket created |
+| `python scripts/demo_smoke.py --external-worker` against the container stack | `OK: full workflow completed end to end.` — Celery worker logged `job_succeeded events=1 detections=177`; evidence downloaded through a MinIO presigned URL |
+| Browser check, production web container → `/api` proxy → API container | `/command` rendered 1 pending candidate, 3/3 cameras, event list, and realtime status “Connected (ticket-authenticated)” |
 
-Not executed: real RTSP, YOLO inference, LLM calls, worker/web container builds, systematic visual
-review of every page at multiple viewports, browser-level automated tests.
+Not executed: real RTSP, YOLO inference, LLM calls, systematic visual review of every page at
+multiple viewports, browser-level automated tests, dependency/container vulnerability scans.
 
 ## 7. Outstanding bugs, risks, security notes
 
@@ -140,9 +143,9 @@ review of every page at multiple viewports, browser-level automated tests.
 
 ## 8. Next tasks (priority order)
 
-1. Build the worker and web images; re-run `scripts/demo_smoke.py` against the containerized API.
-2. Add a browser-level test for review → investigation → work order.
-3. Validate the YOLO adapter in a GPU image and record accuracy/runtime; keep `synthetic_scene`
+1. Add a browser-level test (Playwright) for review → investigation → work order.
+2. Validate the YOLO adapter in a GPU image and record accuracy/runtime; keep `synthetic_scene`
    as the default until then.
-4. Add exposure data before describing hotspot output as a risk rate.
-5. Write and rehearse the retention/deletion policy and backup/restore for private evidence.
+3. Add exposure data before describing hotspot output as a risk rate.
+4. Write and rehearse the retention/deletion policy and backup/restore for private evidence.
+5. Run a dependency/container vulnerability scan and record the residual-risk register.

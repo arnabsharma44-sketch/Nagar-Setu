@@ -43,6 +43,11 @@ def check(condition: bool, message: str) -> None:
         raise StepFailed(message)
 
 
+def absolute_url(base_url: str, url: str) -> str:
+    """Signed URLs are either API-relative (local backend) or absolute (S3)."""
+    return url if url.startswith(("http://", "https://")) else f"{base_url}{url}"
+
+
 class Client:
     def __init__(self, base_url: str) -> None:
         self.http = httpx.Client(base_url=base_url, timeout=60.0)
@@ -102,7 +107,7 @@ def run(base_url: str, *, external_worker: bool) -> None:
     video_id = upload["video_id"]
 
     upload_response = httpx.put(
-        f"{base_url}{upload['upload_url']}",
+        absolute_url(base_url, upload["upload_url"]),
         content=SAMPLE_CLIP.read_bytes(),
         headers={"content-type": content_type},
         timeout=120.0,
@@ -157,7 +162,7 @@ def run(base_url: str, *, external_worker: bool) -> None:
     frame = next((item for item in evidence if item["evidence_type"] == "annotated_frame"), None)
     check(frame is not None, "expected an annotated frame")
     url = operator.get(f"/api/v1/evidence/{frame['id']}/url")["data"]["url"]
-    fetch = operator.http.get(url)
+    fetch = httpx.get(absolute_url(base_url, url), timeout=60.0)
     check(fetch.status_code == 200 and len(fetch.content) > 1000, "annotated frame not retrievable")
     print(f"    evidence={len(evidence)} items, annotated frame {len(fetch.content)} bytes")
 

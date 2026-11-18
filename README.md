@@ -41,7 +41,22 @@ Product specifications live in [`DOCUMENTATIONS/`](DOCUMENTATIONS).
 | AI | Detector adapter (`synthetic_scene` default, YOLO adapter present), IoU tracker (ByteTrack adapter present), versioned event rules |
 | Infra | Docker Compose |
 
-## Quickstart (verified on Windows 11, Python 3.13, Node 26)
+## Quickstart (verified on Windows 11, Python 3.13, Node 26, Docker 29)
+
+### Option A — full container stack (verified)
+
+```bash
+docker compose build            # api, worker, web images
+(cd apps/api && ../../.venv/Scripts/python -m alembic upgrade head)
+docker compose up -d            # postgres, redis, minio, minio-init, api, worker, web
+.venv/Scripts/python scripts/demo_smoke.py --external-worker   # 12/12 through the containers
+```
+
+Open <http://localhost:3000>. The web image bakes `API_INTERNAL_URL` and the `NEXT_PUBLIC_*`
+values at build time (Next resolves rewrites then), so changing the API host or tile server means
+rebuilding `web`; Compose passes these as build args.
+
+### Option B — bare-metal development
 
 ```bash
 # 1. Python environment
@@ -56,7 +71,8 @@ cp .env.example .env      # then set SECRET_KEY, POSTGRES_*, S3_* if using MinIO
 docker compose up -d postgres redis minio minio-init
 
 # 4. Schema + demo data (two organizations, one isolation tenant)
-.venv/Scripts/python -m alembic -c apps/api/alembic.ini upgrade head
+#    Alembic paths are relative, so run it from apps/api (also how the container runs it).
+(cd apps/api && ../../.venv/Scripts/python -m alembic upgrade head)
 .venv/Scripts/python scripts/seed_database.py
 
 # 5. Demo footage (synthetic clip, generated locally — no external download)
@@ -73,7 +89,8 @@ cd apps/api && ../../.venv/Scripts/python -m uvicorn app.main:app --host 127.0.0
 cd apps/web && npm install && npm run dev
 ```
 
-Sign in at `http://localhost:3000/login`.
+Sign in at `http://localhost:3000/login`. Here the API enqueues nothing when `JOB_RUNNER=polling`
+(the development default): the polling worker you started claims jobs from PostgreSQL.
 
 ### Demo accounts
 
