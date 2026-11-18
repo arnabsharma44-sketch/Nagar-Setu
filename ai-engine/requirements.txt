@@ -1,0 +1,11 @@
+sqlalchemy
+psycopg[binary]
+geoalchemy2
+boto3
+numpy
+opencv-python-headless
+celery
+redis
+scikit-learn
+pydantic
+pydantic-settings

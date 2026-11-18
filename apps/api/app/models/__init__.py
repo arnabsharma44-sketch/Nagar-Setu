@@ -1,0 +1,81 @@
+"""SQLAlchemy models. Importing this module registers every table on ``Base``."""
+
+from app.models.enums import (  # noqa: F401
+    WORK_ORDER_TRANSITIONS,
+    AccidentVerificationStatus,
+    AssetType,
+    CameraConnectionStatus,
+    CameraSourceType,
+    ConditionStatus,
+    EvidenceType,
+    IncidentSourceKind,
+    IncidentType,
+    InvestigationStatus,
+    JobStage,
+    JobStatus,
+    LiveSessionStatus,
+    LocationQuality,
+    OrganizationType,
+    Priority,
+    RecommendationStatus,
+    ResponsibilityStatus,
+    ReviewDecision,
+    ReviewStatus,
+    Severity,
+    VerificationStatus,
+    VideoSourceType,
+    VideoStatus,
+    WorkOrderStatus,
+)
+from app.models.identity import Department, Organization, RefreshSession, User  # noqa: F401
+from app.models.incidents import AccidentRecord, Incident  # noqa: F401
+from app.models.media import (  # noqa: F401
+    AIJob,
+    Detection,
+    Evidence,
+    LiveStreamSession,
+    Video,
+)
+from app.models.registry import (  # noqa: F401
+    Asset,
+    Camera,
+    Contract,
+    ContractAsset,
+    Contractor,
+)
+from app.models.workflow import (  # noqa: F401
+    AuditLog,
+    HotspotAnalysis,
+    Investigation,
+    Recommendation,
+    Verification,
+    WorkOrder,
+    WorkOrderStatusHistory,
+)
+
+__all__ = [
+    "AIJob",
+    "AccidentRecord",
+    "Asset",
+    "AuditLog",
+    "Camera",
+    "Contract",
+    "ContractAsset",
+    "Contractor",
+    "Department",
+    "Detection",
+    "Evidence",
+    "HotspotAnalysis",
+    "Incident",
+    "Investigation",
+    "LiveStreamSession",
+    "Organization",
+    "Recommendation",
+    "RefreshSession",
+    "User",
+    "Verification",
+    "Video",
+    "WorkOrder",
+    "WorkOrderStatusHistory",
+    "WORK_ORDER_TRANSITIONS",
+]

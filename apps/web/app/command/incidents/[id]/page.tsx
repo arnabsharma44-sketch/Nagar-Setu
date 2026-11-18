@@ -1,0 +1,273 @@
+"use client";
+
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useState } from "react";
+import { useSession } from "@/lib/session";
+import { useApi } from "@/lib/useApi";
+import { api, ApiError } from "@/lib/api";
+import { EvidenceGrid } from "@/components/EvidenceGrid";
+import {
+  Button,
+  Card,
+  CardHeader,
+  Field,
+  KeyValue,
+  LoadingRows,
+  ErrorState,
+  PageHeader,
+  PermissionNotice,
+  StatusBadge,
+  TagList,
+  Textarea,
+} from "@/components/ui";
+import { formatCoordinates, formatDateTime, humanise } from "@/lib/format";
+import type { Evidence, Incident, Investigation } from "@/lib/types";
+
+const DECISIONS: Array<[string, string, string]> = [
+  ["confirmed", "Confirm observation", "The evidence supports what the rule reported."],
+  [
+    "rejected_false_positive",
+    "Reject as false positive",
+    "The detection is wrong or the footage does not support it.",
+  ],
+  [
+    "needs_more_information",
+    "Request more information",
+    "Evidence is insufficient to decide either way.",
+  ],
+];
+
+export default function IncidentDetailPage() {
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const { has } = useSession();
+  const incident = useApi<Incident>(`/api/v1/incidents/${params.id}`);
+  const evidence = useApi<Evidence[]>(`/api/v1/incidents/${params.id}/evidence`);
+  const [notes, setNotes] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  if (!has("incident:read")) return <PermissionNotice tone="command" permission="incident:read" />;
+
+  async function review(decision: string) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.patch(`/api/v1/incidents/${params.id}/review`, {
+        decision,
+        notes: notes.trim() || null,
+      });
+      setNotice(
+        decision === "confirmed"
+          ? "Observation confirmed. This records a human review decision, not a legal finding."
+          : "Review decision recorded.",
+      );
+      incident.reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "The review decision could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openInvestigation() {
+    if (!incident.data) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const investigation = await api.post<Investigation>("/api/v1/investigations", {
+        incident_id: incident.data.id,
+        title: `Review of ${humanise(incident.data.incident_type)} at ${incident.data.camera_code ?? "unregistered location"}`,
+        summary: incident.data.description,
+        observed_facts: [
+          `Event reported by ${incident.data.model_name ?? "detection pipeline"} ${incident.data.model_version ?? ""}`.trim(),
+          incident.data.review_status === "confirmed"
+            ? "A reviewer confirmed the observation."
+            : `Review state is ${incident.data.review_status}.`,
+        ],
+        missing_information: incident.data.limitations ?? [],
+      });
+      router.push(`/command/investigations/${investigation.id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not open an investigation.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (incident.loading) return <LoadingRows tone="command" label="Loading event…" />;
+  if (incident.error)
+    return <ErrorState tone="command" message={incident.error} onRetry={incident.reload} />;
+  if (!incident.data) return <ErrorState tone="command" message="Event not found." />;
+
+  const record = incident.data;
+
+  return (
+    <>
+      <PageHeader
+        tone="command"
+        breadcrumb={{ label: "Event queue", href: "/command/incidents" }}
+        title={humanise(record.incident_type)}
+        description={record.description}
+        actions={
+          <>
+            <StatusBadge status={record.review_status} />
+            {has("investigation:create") ? (
+              <Button tone="command" variant="secondary" onClick={() => void openInvestigation()} disabled={busy}>
+                Open investigation
+              </Button>
+            ) : null}
+          </>
+        }
+      />
+
+      {notice ? (
+        <p className="mb-3 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+          {notice}
+        </p>
+      ) : null}
+      {error ? (
+        <p role="alert" className="mb-3 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
+          <Card tone="command">
+            <CardHeader
+              title="Evidence"
+              description="Private artefacts generated by the pipeline. Times refer to the source clip."
+              tone="command"
+            />
+            {evidence.loading ? (
+              <LoadingRows tone="command" />
+            ) : evidence.error ? (
+              <ErrorState tone="command" message={evidence.error} onRetry={evidence.reload} />
+            ) : (
+              <EvidenceGrid items={evidence.data ?? []} />
+            )}
+          </Card>
+
+          <Card tone="command">
+            <CardHeader title="Detection details" description="What the rule computed, and what it did not." tone="command" />
+            <div className="px-4 py-4">
+              <KeyValue
+                tone="command"
+                items={[
+                  ["Source kind", record.source_kind === "ai_detected" ? "AI candidate" : "Manual report"],
+                  ["Model", `${record.model_name ?? "—"} ${record.model_version ?? ""}`],
+                  ["Rule", `${record.rule_name ?? "—"} ${record.rule_version ?? "—"}`],
+                  ["Score", record.model_score !== null ? record.model_score.toFixed(3) : "—"],
+                  ["Event time", formatDateTime(record.event_time)],
+                  [
+                    "Window",
+                    record.start_offset_seconds !== null
+                      ? `${record.start_offset_seconds.toFixed(1)}s – ${record.end_offset_seconds?.toFixed(1) ?? "?"}s`
+                      : "—",
+                  ],
+                  ["Camera", record.camera_code ?? "unassigned"],
+                  ["Location", formatCoordinates(record.location?.latitude, record.location?.longitude)],
+                ]}
+              />
+              <div className="mt-4 space-y-3">
+                <div>
+                  <p className="mb-1 text-xs uppercase tracking-wide text-slate-500">Reason codes</p>
+                  <TagList tone="command" items={record.reason_codes} emptyLabel="No reason codes recorded" />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs uppercase tracking-wide text-slate-500">
+                    Limitations acknowledged by the pipeline
+                  </p>
+                  <TagList tone="command" items={record.limitations} emptyLabel="None recorded" />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs uppercase tracking-wide text-slate-500">Track ids</p>
+                  <TagList tone="command" items={record.track_ids.map(String)} emptyLabel="No tracks" />
+                </div>
+                {Object.keys(record.features).length ? (
+                  <details className="rounded-lg border border-[#1e2b3c] bg-[#0b1320] px-3 py-2">
+                    <summary className="cursor-pointer text-xs text-slate-400">
+                      Computed features (raw)
+                    </summary>
+                    <pre className="mt-2 overflow-x-auto text-[11px] text-slate-400">
+                      {JSON.stringify(record.features, null, 2)}
+                    </pre>
+                  </details>
+                ) : null}
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        <div className="space-y-4">
+          <Card tone="command">
+            <CardHeader title="Human review" description="Only a reviewer can change this state." tone="command" />
+            <div className="space-y-3 px-4 py-4">
+              {record.review_status !== "pending" ? (
+                <div className="rounded-lg border border-[#1e2b3c] bg-[#0b1320] px-3 py-2 text-xs text-slate-400">
+                  <p>
+                    Decided {formatDateTime(record.reviewed_at)} ·{" "}
+                    <StatusBadge status={record.review_status} />
+                  </p>
+                  {record.review_notes ? <p className="mt-1">{record.review_notes}</p> : null}
+                </div>
+              ) : null}
+              {has("incident:review") ? (
+                <>
+                  <Field label="Reviewer notes" tone="command" htmlFor="notes" hint="Recorded in the audit trail.">
+                    <Textarea
+                      tone="command"
+                      id="notes"
+                      rows={3}
+                      value={notes}
+                      onChange={(event) => setNotes(event.target.value)}
+                      placeholder="What did you see in the evidence?"
+                    />
+                  </Field>
+                  <div className="space-y-2">
+                    {DECISIONS.map(([value, label, hint]) => (
+                      <div key={value}>
+                        <Button
+                          tone="command"
+                          variant={value === "confirmed" ? "primary" : "secondary"}
+                          onClick={() => void review(value)}
+                          disabled={busy}
+                          className="w-full"
+                        >
+                          {label}
+                        </Button>
+                        <p className="mt-1 text-[11px] text-slate-500">{hint}</p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Your role cannot record review decisions.
+                </p>
+              )}
+            </div>
+          </Card>
+
+          <Card tone="command">
+            <CardHeader title="Responsible use" tone="command" />
+            <ul className="list-disc space-y-1 px-8 py-3 text-xs text-slate-400">
+              <li>A confirmed observation is not an accident determination or a liability finding.</li>
+              <li>Scores come from image-plane geometry; no physical speed is inferred.</li>
+              <li>
+                <Link className="underline" href="/command/hotspots">
+                  Hotspots
+                </Link>{" "}
+                aggregate records; they do not prove causation.
+              </li>
+            </ul>
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}

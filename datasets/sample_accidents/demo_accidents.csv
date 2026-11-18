@@ -1,0 +1,9 @@
+external_reference,source_name,source_reference,latitude,longitude,accident_time,accident_type,severity,road_name,verification_status
+DEMO-ACC-0001,DEMO Synthetic Accident Register (fictional),DEMO-REG-2025-P1,20.2961,85.8245,2025-02-11T08:15:00Z,rear_end,major,DEMO Janpath Junction,verified
+DEMO-ACC-0002,DEMO Synthetic Accident Register (fictional),DEMO-REG-2025-P2,20.2964,85.8249,2025-03-02T18:40:00Z,side_impact,minor,DEMO Janpath Junction,verified
+DEMO-ACC-0003,DEMO Synthetic Accident Register (fictional),DEMO-REG-2025-P3,20.2958,85.8241,2025-04-19T07:05:00Z,pedestrian_strike,serious,DEMO Janpath Junction,verified
+DEMO-ACC-0004,DEMO Synthetic Accident Register (fictional),DEMO-REG-2025-P4,20.2966,85.8252,2025-06-23T21:10:00Z,rear_end,minor,DEMO Janpath Junction,unverified
+DEMO-ACC-0005,DEMO Synthetic Accident Register (fictional),DEMO-REG-2025-P5,20.3011,85.8302,2025-01-30T09:20:00Z,side_impact,major,DEMO Ring Road Sector 4,verified
+DEMO-ACC-0006,DEMO Synthetic Accident Register (fictional),DEMO-REG-2025-P6,20.3015,85.8308,2025-05-14T13:55:00Z,rear_end,minor,DEMO Ring Road Sector 4,verified
+DEMO-ACC-0007,DEMO Synthetic Accident Register (fictional),DEMO-REG-2025-P7,20.2839,85.8412,2025-07-08T22:30:00Z,overturn,serious,DEMO Bypass Curve,verified
+DEMO-ACC-0008,DEMO Synthetic Accident Register (fictional),DEMO-REG-2025-P8,,,2025-08-01T11:00:00Z,unknown,minor,DEMO Unlocated Record,unverified
