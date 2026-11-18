@@ -20,13 +20,13 @@ import logging
 import socket
 import subprocess
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Iterator, Optional
+from typing import Any
 
 import cv2
 import numpy as np
-
 from app.core.config import settings
 
 logger = logging.getLogger("roadguard.rtsp")
@@ -46,8 +46,8 @@ class RtspStreamConfig:
     host: str
     port: int
     path: str
-    username: Optional[str] = None
-    password: Optional[str] = None
+    username: str | None = None
+    password: str | None = None
     transport: str = "tcp"
 
     @property
@@ -66,7 +66,7 @@ class RtspFrame:
     metadata: dict[str, Any]
 
 
-def check_rtsp_authorization(host: str, cidr: Optional[str] = None) -> None:
+def check_rtsp_authorization(host: str, cidr: str | None = None) -> None:
     if not settings.live_cctv_enabled:
         raise RtspAuthorizationError(
             "Live CCTV ingestion is disabled. Set LIVE_CCTV_ENABLED=true "
@@ -103,7 +103,7 @@ def check_host_reachable(host: str, port: int = 554, timeout: float = 5.0) -> bo
     try:
         with socket.create_connection((host, port), timeout=timeout):
             return True
-    except (socket.timeout, ConnectionRefusedError, OSError):
+    except (TimeoutError, ConnectionRefusedError, OSError):
         return False
 
 class RtspStreamReader:
@@ -119,9 +119,9 @@ class RtspStreamReader:
         self.frame_skip = frame_skip
         self.max_reconnect_attempts = max_reconnect_attempts
         self.reconnect_delay_seconds = reconnect_delay_seconds
-        self._capture: Optional[cv2.VideoCapture] = None
+        self._capture: cv2.VideoCapture | None = None
         self._frame_count = 0
-        self._start_time: Optional[float] = None
+        self._start_time: float | None = None
 
     def _build_opencv_url(self) -> str:
         base = self.config.url
@@ -155,7 +155,7 @@ class RtspStreamReader:
             self._capture.release()
             self._capture = None
 
-    def __enter__(self) -> "RtspStreamReader":
+    def __enter__(self) -> RtspStreamReader:
         self.connect()
         return self
 
@@ -219,9 +219,9 @@ def ingest_rtsp_stream(
     camera_id: str,
     secret_reference: str,
     *,
-    duration_seconds: Optional[float] = None,
+    duration_seconds: float | None = None,
     frame_skip: int = 0,
-    frame_callback: Optional[callable] = None,
+    frame_callback: callable | None = None,
 ) -> dict[str, Any]:
     credentials = resolve_rtsp_secret(secret_reference)
 
