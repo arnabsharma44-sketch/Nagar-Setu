@@ -92,16 +92,11 @@ def review_incident(
     incident = get_incident(ctx.session, incident_id)
     if incident.review_status == ReviewStatus(payload.decision.value):
         raise Conflict("This incident already has the requested review status.", code="NO_CHANGE")
-    if payload.decision in {
-        ReviewDecision.CONFIRMED,
-        ReviewDecision.REJECTED_FALSE_POSITIVE,
-        ReviewDecision.NEEDS_MORE_INFORMATION,
-    } and not payload.notes:
-        if payload.decision != ReviewDecision.CONFIRMED:
-            raise ValidationError(
-                "A short note is required when rejecting or requesting more information.",
-                code="REVIEW_NOTE_REQUIRED",
-            )
+    if payload.decision != ReviewDecision.CONFIRMED and not payload.notes:
+        raise ValidationError(
+            "A short note is required when rejecting or requesting more information.",
+            code="REVIEW_NOTE_REQUIRED",
+        )
 
     previous = incident.review_status
     incident.review_status = ReviewStatus(payload.decision.value)

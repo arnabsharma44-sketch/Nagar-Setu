@@ -1,11 +1,12 @@
-sqlalchemy
-psycopg[binary]
-geoalchemy2
-boto3
-numpy
-opencv-python-headless
-celery
-redis
-scikit-learn
-pydantic
-pydantic-settings
+# Pinned from the verified development environment (pip freeze, Python 3.13).
+sqlalchemy==2.1.9
+psycopg[binary]==3.3.9
+geoalchemy2==0.21.0
+boto3==1.44.5
+numpy==2.5.5
+opencv-python-headless==5.1.0.95
+celery==5.7.0
+redis==8.1.0
+scikit-learn==1.9.1
+pydantic==2.14.3
+pydantic-settings==2.16.3

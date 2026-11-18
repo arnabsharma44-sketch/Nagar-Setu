@@ -13,7 +13,7 @@ import logging
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import Any, TypeAlias
+from typing import Any
 
 from app.core.config import settings
 
@@ -53,7 +53,7 @@ def build_envelope(
     }
 
 
-Subscriber: TypeAlias = tuple[asyncio.AbstractEventLoop, asyncio.Queue[dict[str, Any]]]
+type Subscriber = tuple[asyncio.AbstractEventLoop, asyncio.Queue[dict[str, Any]]]
 
 
 class InProcessHub:

@@ -1,0 +1,13 @@
+.git
+.venv
+**/__pycache__
+**/*.pyc
+apps/web/node_modules
+apps/web/.next
+node_modules
+storage
+datasets/sample_videos
+.env
+*.log
+.pytest_cache
+.ruff_cache

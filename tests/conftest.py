@@ -21,6 +21,9 @@ for candidate in (ROOT / "apps" / "api", ROOT / "ai-engine", ROOT):
         sys.path.insert(0, str(candidate))
 
 os.environ.setdefault("ENVIRONMENT", "test")
+# The suite signs in many times by design; the limiter's own behaviour is covered by
+# a unit test against SlidingWindowLimiter, so the HTTP tests raise the ceiling.
+os.environ.setdefault("LOGIN_RATE_LIMIT_PER_MINUTE", "500")
 
 DEMO_PASSWORD = os.environ.get("DEMO_SEED_PASSWORD", "RoadguardDemo#2026")
 

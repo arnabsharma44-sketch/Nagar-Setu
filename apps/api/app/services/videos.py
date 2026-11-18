@@ -166,9 +166,12 @@ def enqueue_job(ctx: RequestContext, video: Video, *, force: bool) -> AIJob:
             AIJob.organization_id == ctx.organization_id, AIJob.idempotency_key == key
         )
     ).scalar_one_or_none()
-    if existing and not force:
-        if existing.status in {JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.SUCCEEDED}:
-            return existing
+    if (
+        existing
+        and not force
+        and existing.status in {JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.SUCCEEDED}
+    ):
+        return existing
 
     job = AIJob(
         organization_id=ctx.organization_id,

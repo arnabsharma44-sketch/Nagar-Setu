@@ -23,7 +23,7 @@ class Meta(BaseModel):
     pagination: Pagination | None = None
 
 
-class Envelope(BaseModel, Generic[T]):
+class Envelope(BaseModel, Generic[T]):  # noqa: UP046 - Generic keeps parity with pydantic v2 typing
     data: T
     meta: Meta
 

@@ -8,6 +8,7 @@ client can never subscribe to another tenant's channel by supplying an id.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import uuid
@@ -135,7 +136,5 @@ async def command_center_socket(websocket: WebSocket, ticket: str = Query(...)) 
         for task in tasks:
             task.cancel()
         await hub.unsubscribe(organization_key, queue)
-        try:
+        with contextlib.suppress(Exception):  # pragma: no cover - socket already gone
             await websocket.close()
-        except Exception:  # pragma: no cover
-            pass

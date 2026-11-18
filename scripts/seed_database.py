@@ -364,7 +364,7 @@ def seed() -> None:
                 },
             ),
         }
-        isolation_asset = upsert(
+        _isolation_asset = upsert(
             session,
             Asset,
             "asset:isolation-001",
@@ -446,7 +446,7 @@ def seed() -> None:
         session.flush()
 
         # ---------------- cameras ----------------
-        cameras = {
+        _cameras = {
             "north": upsert(
                 session,
                 Camera,

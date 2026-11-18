@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://roadguard.local/schemas/realtime_event.schema.json",
+  "title": "ROADGUARD realtime event envelope",
+  "description": "Server-to-client websocket hint. REST stays authoritative; clients must refetch after receiving an event. The organization is derived from the single-use ticket, never from the payload.",
+  "type": "object",
+  "required": ["event_id", "event_type", "occurred_at", "organization_id", "schema_version", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "connected",
+        "camera.status_changed",
+        "video.processing_started",
+        "video.processing_progress",
+        "video.processing_completed",
+        "incident.detected",
+        "incident.reviewed",
+        "investigation.updated",
+        "work_order.updated"
+      ]
+    },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "organization_id": { "type": "string", "format": "uuid" },
+    "resource_type": { "type": ["string", "null"] },
+    "resource_id": { "type": ["string", "null"], "format": "uuid" },
+    "schema_version": { "const": "1.0" },
+    "data": { "type": "object" }
+  }
+}

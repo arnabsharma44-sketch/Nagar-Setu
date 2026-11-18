@@ -12,6 +12,7 @@ Persistence rules that this module enforces:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import sys
@@ -447,14 +448,10 @@ def process_job(job_id: uuid.UUID | str) -> dict[str, Any]:
         return {"status": "failed", "error_code": "PROCESSING_ERROR"}
     finally:
         for name in os.listdir(temp_dir):
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(os.path.join(temp_dir, name))
-            except OSError:
-                pass
-        try:
+        with contextlib.suppress(OSError):
             os.rmdir(temp_dir)
-        except OSError:
-            pass
 
 
 def claim_next_job(worker_id: str) -> tuple[uuid.UUID, uuid.UUID] | None:

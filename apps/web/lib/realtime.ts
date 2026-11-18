@@ -35,7 +35,7 @@ export function useRealtime(onEvent?: (event: RealtimeEvent) => void) {
 
   handlerRef.current = onEvent;
 
-  const origin = process.env.NEXT_PUBLIC_WS_ORIGIN ?? "ws://127.0.0.1:8000";
+  const origin = process.env.NEXT_PUBLIC_WS_URL ?? "ws://127.0.0.1:8000";
 
   const connect = useCallback(async () => {
     try {
