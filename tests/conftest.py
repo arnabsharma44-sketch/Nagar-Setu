@@ -29,6 +29,14 @@ DEMO_PASSWORD = os.environ.get("DEMO_SEED_PASSWORD", "RoadguardDemo#2026")
 
 
 @pytest.fixture(scope="session")
+def db_engine():
+    """Privileged engine for schema-level assertions (tables, RLS, PostGIS)."""
+    from app.db.session import get_privileged_engine
+
+    return get_privileged_engine()
+
+
+@pytest.fixture(scope="session")
 def client():
     from app.main import create_app
     from fastapi.testclient import TestClient

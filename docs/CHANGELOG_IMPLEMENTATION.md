@@ -2,6 +2,122 @@
 
 Newest first. Each entry records what changed, why, and how it was verified.
 
+## 2026-11-22 — Supabase cut-over executed and verified locally
+
+### Proven, not just coded
+- Stood up a **Supabase-shaped** Postgres (`docker-compose.supabase.yml`): Supabase's role
+  set (`anon`, `authenticated`, `service_role`, `authenticator`, plus `roadguard_app`),
+  PostGIS/pgcrypto in an `extensions` schema, database `search_path`, TLS with non-TLS TCP
+  rejected by `pg_hba`, and pgbouncer in **transaction mode on 6543** with TLS on both legs.
+- Migrations ran from an empty database to `837c7ef69730` with zero errors; a second run was a
+  no-op. Result: 24 tables, 23 RLS tables, 23 policies (all keyed on
+  `current_organization_id`), 60 FKs, 119 indexes, 4 geography columns, append-only audit
+  grants.
+- RLS proven **through the pooler**: org A saw 3 own cameras, 0 of org B, 0 with no tenant
+  context; a cross-tenant UPDATE touched 0 rows; a cross-tenant INSERT failed with
+  `new row violates row-level security policy` and persisted nothing.
+- Audit immutability proven as `roadguard_app`: `UPDATE`/`DELETE` denied, `SELECT`/`INSERT`
+  allowed.
+- Tenant-isolation + database suites passed against this instance through the pooler, and
+  `demo_smoke.py --external-worker` completed 12/12 with separate API and worker processes
+  using the pooler URL.
+- SQL-only path: `infrastructure/supabase/hosted-bootstrap.sql`, `schema.sql` (pg_dump at
+  head) and `verify.sql`; `schema.sql` loaded into a **fresh** database cleanly.
+
+### Fixed
+- **Supabase pooler URL bug:** `?pgbouncer=true` was detected but forwarded to libpq, which
+  raises `invalid connection option "pgbouncer"`. Added `strip_driver_params`, applied in the
+  session factory, Alembic env and setup script.
+- Added `validate_database_url` (refuses TLS-less Supabase/pooler URLs and `pgbouncer=true` on
+  5432) and `ensure_direct_for_migrations` (refuses migrations through 6543), wired into the
+  engine, Alembic and `--migrate`, with regression tests.
+
+### Known operational trap
+- Rotating the app-role password leaves pgbouncer reporting `server login has been failing`
+  until it is restarted/reloaded. Documented in `docs/SUPABASE.md`.
+
+Runbook: `docs/SUPABASE.md`. Raw output: `docs/SUPABASE_VERIFICATION.md`.
+
+## 2026-11-22 — Full product audit, dataset tooling, camera-metric fix
+
+### Audit
+- Added `docs/quality/` — 20 reports covering routes (23 pages, not 21), controls, API
+  (82 operations / 69 paths), database integrity, security, AI validation, video pipeline,
+  dataset acquisition/validation/licences, performance, accessibility, E2E, bug register and
+  final acceptance. Each PASS carries the command or query behind it; blocked checks are labelled
+  BLOCKED rather than passed.
+
+### Fixed
+- **B-002 (P2):** the command dashboard's "Cameras online" card counted `is_enabled`, so it read
+  `13/13` while every camera was `offline`/`unknown`. It now counts `connection_status === "online"`
+  and the hint says so. Verified by rebuild and by the SQL status distribution.
+- **B-001 (P3):** dataset download instructions printed the archive stem as the `--dataset`
+  argument; the dataset key is now passed explicitly.
+
+### Dataset pipeline
+- Added `datasets/manifest.yaml`, `datasets/README.md`, the full directory contract, and
+  `scripts/datasets/` (`download`, `verify_downloads`, `extract`, `inspect`, `validate_annotations`,
+  `prepare`, `evaluate_models`, `build_fixtures`).
+- The pipeline is proven on a reproducible synthetic RDD fixture: size/SHA-256/zip check, safe
+  extraction, 3 images / 2 VOC files / 1 corrupt image detected, VOC validation clean, deterministic
+  sequence-aware split, and IoU evaluation producing `precision=0.6667 recall=1.0 f1=0.8`. Without a
+  predictions file the evaluator exits BLOCKED instead of inventing numbers.
+- **Real acquisition BLOCKED:** RDD2022 India S3 → HTTP 403; AI City Track 4 Drive → HTML
+  interstitial with 0 bytes; BDD100K → login/licence required. Exact manual steps are in
+  `docs/quality/DATASET_ACQUISITION_REPORT.md`; no placeholder data was substituted.
+
+## 2026-11-22 — Endpoint audit, Supabase support, dataset intake
+
+### Every endpoint is now exercised
+- Added `tests/integration/test_endpoint_coverage.py`. It runs the full dependency chain
+  (registry → camera → signed upload → job → incident → accident import → hotspots → investigation →
+  recommendation → work order → completion evidence → independent verification → audit → WebSocket)
+  and then diffs the calls it made against `app.openapi()`. A documented operation that is never
+  called fails the test, so new routes cannot ship unexercised.
+- Added a second test that replays every documented operation without a session and fails on any 2xx
+  outside the five intentional pre-auth endpoints (health probes, the static permission catalog, the
+  CSRF bootstrap cookie and idempotent logout).
+- Generated `docs/ENDPOINT_AUDIT.md` (82 operations / 68 paths) from the live OpenAPI document.
+- *Verified:* the suite passes; the assertions found the real contract differences that had been
+  guessed wrong in older tests (change-password/logout return 204, unsupported media is 415 not 422,
+  a work order must go `pending → assigned → in_progress`).
+
+### Supabase support
+- `apps/api/app/db/urls.py` normalises Supabase's plain `postgresql://` URIs to the psycopg driver,
+  injects `sslmode`, and disables named prepared statements behind the transaction pooler (port 6543).
+- Alembic escapes `%` in generated passwords before handing the URL to configparser.
+- `scripts/supabase_setup.py` inspects a database (version, TLS, PostGIS schema, `pgcrypto`, RLS
+  policies, app-role attributes), can create the extensions and the `roadguard_app` role with
+  `NOSUPERUSER NOBYPASSRLS NOINHERIT`, set its `search_path` to include `extensions`, apply grants,
+  re-revoke `UPDATE`/`DELETE` on `audit_logs`, write `.env` and run migrations. Passwords are never
+  echoed.
+- `docker-compose.yml` now reads `COMPOSE_DATABASE_MIGRATION_URL` / `COMPOSE_DATABASE_APP_URL`
+  (local container defaults preserved), plus `DATABASE_SSL_MODE` and a connect timeout.
+- Added `docs/SUPABASE.md` and the Supabase block in `.env.example`.
+- *Verified:* URL/pooler unit tests pass; the inspector reports `[ok]` for every row against the
+  bundled PostGIS container. **No Supabase project was available**, so a live switch is still owed.
+
+### Dataset research and intake
+- Added `docs/DATASETS.md`: the public corpora that actually exist (AI City Challenge 2020 Track 4,
+  DoTA, the ACCIDENT benchmark, IDD/IDD-CRS, WTS, Nexar, CCD), their access terms, and the honest
+  conclusion that no downloadable Indian municipal fixed-CCTV accident corpus exists.
+- Added `scripts/prepare_dataset.py`: probes clips with OpenCV, SHA-256 hashes them, enforces the API's
+  container/size/duration/resolution limits, writes a provenance manifest and can ingest ready clips
+  through the normal upload → job flow (`--upload`).
+- *Verified:* the synthetic demo clip validates and produces `datasets/manifests/prepared.json`.
+
+### Test pack repair
+- `tests/integration/test_database.py` required a `db_engine` fixture that did not exist; added it.
+- `tests/unit/test_recommendations.py` used a fixture scoped to another class and asserted text the
+  deterministic analyser never emits; moved the fixture and corrected the expectations.
+- `tests/unit/test_responsibility.py` and `test_hotspots.py` used bare `Mock()` sessions that could not
+  be iterated; replaced with ordered stubs that mirror the real queries.
+- `tests/integration/test_video_pipeline.py` had a mangled module-level test and a stray assertion;
+  rewritten against the real 415/413 contract, including proof that a rejected container creates no job.
+- `tests/unit/test_event_detection.py` asked the pedestrian rule to fire on constant separation and the
+  motion rules on too-short tracks; replaced with genuinely converging/decelerating scenarios.
+- *Result:* `pytest` passes (all tests, no skips except the pre-existing one), `ruff` clean.
+
 ## 2026-11-18 — Containerized stack verified
 
 - **Celery entrypoint was wrong.** `python -m ai_engine.workers.celery_app worker …` made Celery parse

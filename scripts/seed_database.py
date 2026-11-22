@@ -31,6 +31,7 @@ from app.db.session import get_privileged_engine, privileged_session  # noqa: E4
 from app.models import (  # noqa: E402
     AccidentRecord,
     AccidentVerificationStatus,
+    AIJob,
     Asset,
     AssetType,
     Camera,
@@ -41,10 +42,27 @@ from app.models import (  # noqa: E402
     ContractAsset,
     Contractor,
     Department,
+    Evidence,
+    EvidenceType,
+    Incident,
+    IncidentSourceKind,
+    IncidentType,
+    Investigation,
+    InvestigationStatus,
+    JobStage,
+    JobStatus,
     LocationQuality,
     Organization,
     OrganizationType,
+    Priority,
+    ReviewStatus,
+    Severity,
     User,
+    Video,
+    VideoSourceType,
+    VideoStatus,
+    WorkOrder,
+    WorkOrderStatus,
 )
 from geoalchemy2.elements import WKTElement  # noqa: E402
 from sqlalchemy import text  # noqa: E402
@@ -188,8 +206,9 @@ def seed() -> None:
             ("user:auditor", "Demo Auditor", "auditor@demo.roadguard.ai", "auditor", None, org_main),
             ("user:isolation", "Demo Isolation Operator", "ops@isolation.roadguard.ai", "police_admin", None, org_isolation),
         ]
+        user_objs: dict[str, User] = {}
         for key, full_name, email, role, dept_key, organization in users:
-            upsert(
+            user_objs[key] = upsert(
                 session,
                 User,
                 key,
@@ -521,6 +540,149 @@ def seed() -> None:
                 "source_type": CameraSourceType.UPLOAD_ASSOCIATION,
                 "connection_status": CameraConnectionStatus.UNKNOWN,
                 "is_enabled": True,
+                "is_demo": True,
+            },
+        )
+        session.flush()
+
+        # ---------------- representative workflow graph ----------------
+        # The tenant-isolation suite needs at least one row of each kind before it
+        # can prove a second organisation cannot read it. Seeding one incident,
+        # video, job, evidence artefact, investigation and work order keeps a cold
+        # `seed -> pytest` run skip-free instead of silently proving nothing.
+        demo_video = upsert(
+            session,
+            Video,
+            "video:demo-near-miss",
+            {
+                "organization_id": org_main.id,
+                "camera_id": _cameras["north"].id,
+                "uploaded_by": user_objs["user:ops"].id,
+                "storage_key": "demo/videos/demo-near-miss.mp4",
+                "original_filename": "DEMO-near-miss.mp4",
+                "content_type": "video/mp4",
+                "file_size_bytes": 524288,
+                "checksum_sha256": "0" * 64,
+                "source_type": VideoSourceType.UPLOAD,
+                "recorded_at": now,
+                "duration_seconds": 12.0,
+                "width": 1280,
+                "height": 720,
+                "frame_rate": 25.0,
+                "status": VideoStatus.PROCESSED,
+                "is_demo": True,
+            },
+        )
+        # Flush each parent: these rows are linked by raw ids (no ORM relationship),
+        # so SQLAlchemy cannot infer the insert order on its own.
+        session.flush()
+        demo_job = upsert(
+            session,
+            AIJob,
+            "job:demo-near-miss",
+            {
+                "organization_id": org_main.id,
+                "video_id": demo_video.id,
+                "job_type": "video_analysis",
+                "status": JobStatus.SUCCEEDED,
+                "stage": JobStage.COMPLETED,
+                "progress": 100,
+                "idempotency_key": "demo-near-miss",
+                "model_name": "synthetic-scene-colour-marker",
+                "model_version": "1.0",
+                "config_snapshot": {"source": "seed"},
+                "result_summary": {"events": 1, "is_demo": True},
+                "started_at": now,
+                "completed_at": now,
+                "created_by": user_objs["user:ops"].id,
+            },
+        )
+        session.flush()
+        demo_incident = upsert(
+            session,
+            Incident,
+            "incident:demo-near-miss",
+            {
+                "organization_id": org_main.id,
+                "camera_id": _cameras["north"].id,
+                "video_id": demo_video.id,
+                "ai_job_id": demo_job.id,
+                "incident_type": IncidentType.NEAR_MISS_CANDIDATE,
+                "source_kind": IncidentSourceKind.AI_CANDIDATE,
+                "severity": Severity.MEDIUM,
+                "model_score": 0.72,
+                "event_time": now,
+                "start_offset_seconds": 3.0,
+                "end_offset_seconds": 9.0,
+                "location": point(20.2961, 85.8245),
+                "latitude": 20.2961,
+                "longitude": 85.8245,
+                "location_quality": LocationQuality.APPROXIMATE,
+                "description": "DEMO synthetic near-miss used by isolation tests.",
+                "review_status": ReviewStatus.CONFIRMED,
+                "reviewed_by": user_objs["user:reviewer"].id,
+                "reviewed_at": now,
+                "model_name": "synthetic-scene-colour-marker",
+                "model_version": "1.0",
+                "rule_name": "demo_near_miss",
+                "rule_version": "1.0",
+                "is_demo": True,
+            },
+        )
+        session.flush()
+        upsert(
+            session,
+            Evidence,
+            "evidence:demo-frame",
+            {
+                "organization_id": org_main.id,
+                "incident_id": demo_incident.id,
+                "storage_key": "demo/evidence/demo-frame.jpg",
+                "evidence_type": EvidenceType.ANNOTATED_FRAME,
+                "label": "DEMO annotated frame",
+                "content_type": "image/jpeg",
+                "original_filename": "DEMO-frame.jpg",
+                "file_size_bytes": 32768,
+                "checksum_sha256": "1" * 64,
+                "timestamp_in_video": 4.5,
+                "created_by": user_objs["user:ops"].id,
+                "is_demo": True,
+            },
+        )
+        demo_investigation = upsert(
+            session,
+            Investigation,
+            "investigation:demo-case",
+            {
+                "organization_id": org_main.id,
+                "case_number": "DEMO-INV-0001",
+                "incident_id": demo_incident.id,
+                "assigned_department_id": departments["roads"].id,
+                "title": "DEMO investigation: Janpath near-miss",
+                "summary": "Synthetic case seeded for isolation and UI coverage.",
+                "observed_facts": ["DEMO: a near-miss candidate was reviewed and confirmed."],
+                "hypotheses": [],
+                "missing_information": ["DEMO: field verification not yet scheduled."],
+                "status": InvestigationStatus.OPEN,
+                "opened_by": user_objs["user:ops"].id,
+                "is_demo": True,
+            },
+        )
+        upsert(
+            session,
+            WorkOrder,
+            "work-order:demo-case",
+            {
+                "organization_id": org_main.id,
+                "work_order_number": "DEMO-WO-0001",
+                "investigation_id": demo_investigation.id,
+                "assigned_department_id": departments["roads"].id,
+                "title": "DEMO work order: inspect Janpath crossing",
+                "description": "Synthetic work order seeded for isolation and UI coverage.",
+                "status": WorkOrderStatus.PENDING,
+                "priority": Priority.HIGH,
+                "due_date": now.date(),
+                "created_by": user_objs["user:ops"].id,
                 "is_demo": True,
             },
         )

@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     postgres_app_user: str = "roadguard_app"
     database_pool_size: int = 10
     database_echo: bool = False
+    # Managed PostgreSQL (Supabase) terminates TLS. ``prefer`` keeps local
+    # containers working; set ``require``/``verify-full`` for Supabase.
+    database_ssl_mode: str = "prefer"
+    database_connect_timeout_seconds: int = 10
+    # Optional managed-database inputs read by scripts/supabase_setup.py. Keeping
+    # them here lets the operator put the URL in .env instead of a shell argument.
+    supabase_db_url: str = ""
+    supabase_pooler_url: str = ""
 
     # --- queue ---
     redis_url: str = "redis://localhost:6379/0"
@@ -140,6 +148,10 @@ class Settings(BaseSettings):
     @property
     def supported_video_extensions(self) -> set[str]:
         return {".mp4", ".mov", ".mkv", ".webm"}
+
+    @property
+    def database_tls_enabled(self) -> bool:
+        return self.database_ssl_mode not in {"", "disable", "allow", "prefer"}
 
     def require_runtime_secrets(self) -> None:
         """Fail fast when a required secret is missing or obviously unsafe."""

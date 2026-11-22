@@ -1,0 +1,82 @@
+# ROADGUARD AI — external dataset registry.
+#
+# This file is the single source of truth for the dataset utilities in
+# scripts/datasets/. It records provenance and access requirements; it never
+# contains credentials.
+#
+# status values:
+#   not_downloaded  no archive present
+#   blocked         access requires a human step (login, licence, quota, 403)
+#   downloaded      archive present and size-checked
+#   verified        archive present and SHA-256 recorded + zip integrity OK
+#   extracted       archive unpacked into the dataset root
+#   validated       annotations parsed and structure checked
+version: 1
+
+datasets:
+  aicity2021_track4:
+    title: AI City Challenge 2021 — Track 4 Traffic Anomaly Detection
+    task: traffic_anomaly_detection
+    source_url: https://www.aicitychallenge.org/2021-track4-download/
+    archive_url: https://drive.google.com/file/d/1gsR4pIEiWK7htPmIjiZjXetaa1X-T-Am/view?usp=sharing
+    archive_name: AICity21-Track4-Anomaly-Detection.zip
+    expected_bytes: null
+    license: >-
+      Challenge research terms. Review the official page and the archive's own
+      notice before use; do not assume commercial rights.
+    access: manual
+    access_note: >-
+      The official link is a Google Drive file. Automated download returns the
+      Drive interstitial/quota page rather than bytes, so a human must save it.
+    root: datasets/external/aicity2021_track4
+    raw_dir: raw
+    extract_to: extracted
+    annotations_glob: "**/*.json"
+    notes: >-
+      Do not use the unlabeled test split as ground truth. Anomaly labels must be
+      mapped to the project's event timestamps before any metric is reported.
+
+  rdd2022_india:
+    title: RDD2022 — Road Damage Dataset (India subset, CRDDC2022)
+    task: road_damage_detection
+    source_url: https://github.com/sekilab/RoadDamageDetector
+    archive_url: https://bigdatacup.s3.ap-northeast-1.amazonaws.com/2022/CRDDC2022/RDD2022/Country_Specific_Data_CRDDC2022/RDD2022_India.zip
+    archive_name: RDD2022_India.zip
+    expected_bytes: null
+    license: >-
+      Research/benchmark use with attribution to the RDD2022 authors. Confirm the
+      repository's current terms before any redistribution.
+    access: blocked_http_403
+    access_note: >-
+      The published S3 object answers HTTP 403 to anonymous GET/HEAD. Obtain the
+      archive through the official repository's documented link after accepting
+      its terms, then place it at the path below.
+    root: datasets/external/rdd2022_india
+    raw_dir: raw
+    extract_to: extracted
+    annotations_glob: "**/annotations/xmls/*.xml"
+    notes: >-
+      Damage findings are infrastructure observations, never evidence of accident
+      causation. Keep them out of CCTV event counts.
+
+  bdd100k:
+    title: BDD100K — Berkeley DeepDrive
+    task: object_detection
+    source_url: https://bdd-data.berkeley.edu/
+    archive_url: null
+    archive_name: bdd100k_images_100k.zip
+    expected_bytes: null
+    license: >-
+      BDD100K has its own data licence and requires account registration and
+      agreement acceptance. Educational access does not imply commercial rights.
+    access: manual_login
+    access_note: >-
+      The portal requires sign-in and licence acceptance. Download the 100K images
+      and Detection 2020 labels; do not fetch the 1.8 TB video collection.
+    root: datasets/external/bdd100k
+    raw_dir: raw
+    extract_to: extracted
+    annotations_glob: "**/labels/det_20/*.json"
+    notes: >-
+      Detection labels are for benchmarking object detection, not for declaring
+      accidents or liability.

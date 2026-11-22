@@ -20,6 +20,11 @@ if str(API_DIR) not in sys.path:
 import app.models  # noqa: E402,F401  (registers all tables)
 from app.core.config import settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
+from app.db.urls import (  # noqa: E402
+    ensure_direct_for_migrations,
+    strip_driver_params,
+    validate_database_url,
+)  # noqa: E402
 
 config = context.config
 
@@ -29,7 +34,14 @@ if config.config_file_name is not None:
 database_url = settings.database_migration_url or settings.database_app_url
 if not database_url:
     raise RuntimeError("DATABASE_MIGRATION_URL must be set to run migrations")
-config.set_main_option("sqlalchemy.url", database_url)
+# Alembic interpolates this value through configparser, so a literal % in a
+# generated password must be escaped or the connection URL is mangled.
+ensure_direct_for_migrations(database_url)
+validate_database_url(database_url, ssl_mode=settings.database_ssl_mode)
+config.set_main_option(
+    "sqlalchemy.url",
+    strip_driver_params(database_url).replace("%", "%%"),
+)
 # Migrations read this to target grants/revokes without hard-coding a role name.
 config.set_main_option("roadguard_app_role", settings.postgres_app_user)
 

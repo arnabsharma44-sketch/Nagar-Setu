@@ -59,10 +59,6 @@ export default function CommandOverviewPage() {
       })),
   ];
 
-  const openInvestigations = (incidents.data ?? []).filter(
-    (incident) => incident.review_status === "pending",
-  ).length;
-
   return (
     <>
       <PageHeader
@@ -110,8 +106,8 @@ export default function CommandOverviewPage() {
         <MetricCard
           tone="command"
           label="Cameras online"
-          value={`${(cameras.data ?? []).filter((camera) => camera.is_enabled).length}/${(cameras.data ?? []).length || 0}`}
-          hint="Registered camera registry entries"
+          value={`${(cameras.data ?? []).filter((camera) => camera.connection_status === "online").length}/${(cameras.data ?? []).length || 0}`}
+          hint="Reporting online in the registry, not merely enabled"
         />
       </div>
 
@@ -210,7 +206,7 @@ export default function CommandOverviewPage() {
         <Card tone="command">
           <CardHeader
             title="Latest events"
-            description={`${openInvestigations} candidate event(s) still need a review decision`}
+            description={`${analytics.data?.pending_candidates ?? 0} candidate event(s) still need a review decision`}
             tone="command"
             actions={
               <Link href="/command/incidents" className="text-xs text-sky-300 hover:underline">

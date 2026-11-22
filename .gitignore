@@ -47,3 +47,40 @@ datasets/sample_videos/*.json
 Thumbs.db
 .idea/
 .vscode/
+
+# Operator footage and generated provenance manifests must never be committed.
+datasets/incoming/*
+!datasets/incoming/README.md
+datasets/manifests/*.json
+
+# External datasets: archives, extracted content and model weights never enter git.
+datasets/external/*/raw/*
+!datasets/external/*/raw/.gitkeep
+datasets/external/*/extracted/
+datasets/external/*/annotations/*
+!datasets/external/*/annotations/.gitkeep
+datasets/external/*/images/*
+!datasets/external/*/images/.gitkeep
+datasets/external/*/labels/*
+!datasets/external/*/labels/.gitkeep
+datasets/external/*/processed/*
+!datasets/external/*/processed/.gitkeep
+datasets/reports/*
+!datasets/reports/.gitkeep
+datasets/fixtures/**/*.mp4
+datasets/fixtures/**/*.avi
+datasets/fixtures/**/*.mov
+datasets/fixtures/**/frames/
+*.pt
+*.pth
+*.onnx
+
+# Generated dataset fixtures (recreate with scripts/datasets/build_fixtures.py)
+datasets/fixtures/rdd2022_mini/
+
+# Local Supabase-shaped verification certificates and credentials
+infrastructure/supabase/certs/
+infrastructure/supabase/pgbouncer/userlist.txt
+
+# Local Supabase-shaped runtime storage
+storage-supabase/

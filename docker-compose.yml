@@ -92,8 +92,12 @@ services:
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-development}
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
-      DATABASE_APP_URL: postgresql+psycopg://${POSTGRES_APP_USER:-roadguard_app}:${POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_DB:-roadguard}
-      DATABASE_MIGRATION_URL: postgresql+psycopg://${POSTGRES_USER:-roadguard}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-roadguard}
+      # Supabase: set COMPOSE_DATABASE_*_URL in .env (scripts/supabase_setup.py --write-env
+      # does it for you). The default keeps the bundled local PostGIS working.
+      DATABASE_APP_URL: ${COMPOSE_DATABASE_APP_URL:-postgresql+psycopg://${POSTGRES_APP_USER:-roadguard_app}:${POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_DB:-roadguard}}
+      DATABASE_MIGRATION_URL: ${COMPOSE_DATABASE_MIGRATION_URL:-postgresql+psycopg://${POSTGRES_USER:-roadguard}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-roadguard}}
+      DATABASE_SSL_MODE: ${DATABASE_SSL_MODE:-prefer}
+      DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:-10}
       REDIS_URL: redis://redis:6379/0
       STORAGE_BACKEND: s3
       S3_ENDPOINT_URL: http://minio:9000
@@ -135,8 +139,12 @@ services:
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-development}
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
-      DATABASE_APP_URL: postgresql+psycopg://${POSTGRES_APP_USER:-roadguard_app}:${POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_DB:-roadguard}
-      DATABASE_MIGRATION_URL: postgresql+psycopg://${POSTGRES_USER:-roadguard}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-roadguard}
+      # Supabase: set COMPOSE_DATABASE_*_URL in .env (scripts/supabase_setup.py --write-env
+      # does it for you). The default keeps the bundled local PostGIS working.
+      DATABASE_APP_URL: ${COMPOSE_DATABASE_APP_URL:-postgresql+psycopg://${POSTGRES_APP_USER:-roadguard_app}:${POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_DB:-roadguard}}
+      DATABASE_MIGRATION_URL: ${COMPOSE_DATABASE_MIGRATION_URL:-postgresql+psycopg://${POSTGRES_USER:-roadguard}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-roadguard}}
+      DATABASE_SSL_MODE: ${DATABASE_SSL_MODE:-prefer}
+      DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:-10}
       REDIS_URL: redis://redis:6379/0
       STORAGE_BACKEND: s3
       S3_ENDPOINT_URL: http://minio:9000

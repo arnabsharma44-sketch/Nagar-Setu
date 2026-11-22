@@ -200,7 +200,7 @@ Nagar-Setu uses a **Clean Modular Monolith** architecture for business transacti
 |:---|:---|:---|
 | **Frontend** | Next.js 16 (App Router), React 19, TypeScript 5.7, Tailwind CSS 4, Leaflet, React-Leaflet | High-performance reactive interfaces with distinct light/dark themes and geospatial maps |
 | **Backend API** | FastAPI 0.115+, Pydantic v2, SQLAlchemy 2.0, Alembic, Uvicorn | Strictly typed RESTful API with automated OpenAPI specifications and structured error responses |
-| **Database & GIS** | PostgreSQL 16, PostGIS 3.4, GeoAlchemy2 | Relational schema with spatial indices (`GIST`), PostGIS geography types, and DB-enforced RLS |
+| **Database & GIS** | PostgreSQL 16, PostGIS 3.4, GeoAlchemy2, Supabase (managed) | Relational schema with spatial indices (`GIST`), PostGIS geography types, and DB-enforced RLS. Runs on the bundled PostGIS container or Supabase; see [docs/SUPABASE.md](docs/SUPABASE.md) |
 | **Task Queue** | Celery 5.4, Redis 7.4 (Alpine), Polling Worker Fallback | Distributed asynchronous task execution with heartbeat lease extension and idempotent claims |
 | **Computer Vision** | OpenCV (cv2), NumPy, IoU Tracker, ByteTrack Adapter, YOLO Adapter | Video decoding, frame sampling, trajectory prediction, and candidate event classification |
 | **Object Storage** | MinIO (Chainguard hardened image) / AWS S3 | Encrypted, private object storage accessed strictly via short-lived presigned URLs |
@@ -436,7 +436,15 @@ cd apps/web && npm run build
 
 # 5. Run end-to-end containerized smoke test
 python scripts/demo_smoke.py --external-worker
+
+# 6. Exercise every documented API operation (and the anonymous auth sweep)
+python -m pytest tests/integration/test_endpoint_coverage.py -v
 ```
+
+**Dataset intake:** real footage must come from the operator. `scripts/prepare_dataset.py` probes,
+hashes and validates clips against the ingestion limits, writes a provenance manifest and can upload
+them; `docs/DATASETS.md` records which public corpora exist and why none of them is an Indian city
+CCTV corpus.
 
 ---
 
@@ -455,6 +463,10 @@ Key endpoint groups:
 - **`/api/v1/work-orders`** — Corrective work order dispatch, repair milestones, independent verification.
 - **`/api/v1/audit`** — Append-only chronological audit log exploration.
 - **`/api/v1/realtime`** — Ticket-authenticated WebSocket telemetry stream.
+
+**Surface:** 82 operations across 69 documented paths. Every one of them is executed by
+`tests/integration/test_endpoint_coverage.py`, which fails if a documented operation is never
+called. The generated matrix is [docs/ENDPOINT_AUDIT.md](docs/ENDPOINT_AUDIT.md).
 
 ---
 

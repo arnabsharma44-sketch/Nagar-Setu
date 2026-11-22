@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from tests.conftest import DEMO_PASSWORD
 
 CITY = "ops@demo.roadguard.ai"
 ISOLATION = "ops@isolation.roadguard.ai"

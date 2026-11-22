@@ -1,0 +1,10 @@
+{
+  "images": 3,
+  "annotations": 2,
+  "valid_images": 2,
+  "corrupt_images": 1,
+  "class_distribution": {
+    "D40": 1,
+    "D00": 1
+  }
+}

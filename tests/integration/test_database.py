@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
@@ -70,10 +69,17 @@ class TestDatabaseSchema:
 
     def test_rls_uses_transaction_local_setting(self, db_engine: Engine) -> None:
         with db_engine.connect() as conn:
-            result = conn.execute(text("""
-                SELECT polname, polcmd FROM pg_policy
-                WHERE polname = 'tenant_isolation'
-            """)).fetchall()
-            assert len(result) > 0
-            for row in result:
-                assert row[1] == 'r'  # SELECT policy exists
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT polname, pg_get_expr(polqual, polrelid) AS using_expression
+                    FROM pg_policy
+                    WHERE polname = 'tenant_isolation'
+                    """
+                )
+            ).fetchall()
+        assert rows, "tenant_isolation policies must exist"
+        for name, using_expression in rows:
+            assert name == "tenant_isolation"
+            assert using_expression, "every tenant policy needs a USING expression"
+            assert "app.current_organization_id" in using_expression

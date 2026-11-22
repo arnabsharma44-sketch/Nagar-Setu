@@ -1,0 +1,8 @@
+{
+  "access": "manual_login",
+  "dataset": "BDD100K \u2014 Berkeley DeepDrive",
+  "license": "BDD100K has its own data licence and requires account registration and agreement acceptance. Educational access does not imply commercial rights.",
+  "source_url": "https://bdd-data.berkeley.edu/",
+  "status": "blocked",
+  "updated_at": "2026-11-22T10:39:09.728245+00:00"
+}

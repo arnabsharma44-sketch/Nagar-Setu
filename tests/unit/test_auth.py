@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 import pytest
+from app.core.errors import AuthenticationError
 from app.core.security import (
-    hash_password,
-    verify_password,
-    needs_rehash,
-    normalize_email,
-    hash_token,
     create_access_token,
     create_refresh_token,
     decode_token,
     generate_csrf_token,
+    hash_password,
+    hash_token,
+    needs_rehash,
+    normalize_email,
     tokens_equal,
+    verify_password,
 )
-from app.core.errors import AuthenticationError
 
 
 class TestPasswordHashing:
@@ -68,7 +68,7 @@ class TestJWTTokens:
 
     def test_create_refresh_token(self) -> None:
         import uuid
-        from datetime import datetime, UTC
+        from datetime import UTC, datetime
         user_id = uuid.uuid4()
         org_id = uuid.uuid4()
         session_id = uuid.uuid4()
@@ -93,9 +93,10 @@ class TestJWTTokens:
         assert payload["type"] == "access"
 
     def test_decode_token_expired_raises(self) -> None:
-        from app.core.security import _encode
-        from datetime import timedelta, UTC
         import uuid
+        from datetime import timedelta
+
+        from app.core.security import _encode
         expired_token = _encode(
             {"type": "access", "sub": str(uuid.uuid4()), "org": str(uuid.uuid4())},
             timedelta(seconds=-1),

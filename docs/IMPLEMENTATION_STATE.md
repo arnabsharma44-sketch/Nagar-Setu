@@ -1,8 +1,9 @@
 # ROADGUARD AI — Implementation State
 
-**Last updated:** 18 November 2026
-**Branch:** `main` (single commit `3a29f34 first commit`; all implementation work is uncommitted on
-disk — inspect `git status` before continuing)
+**Last updated:** 22 November 2026
+**Branch:** `main`. The 18 November implementation work is committed; the 22 November endpoint audit,
+Supabase, dataset tooling and full quality audit (`docs/quality/`) are on disk — inspect `git status`
+before continuing.
 **Source specifications:** `DOCUMENTATIONS/01`–`11`, `14`, `15`
 
 This file is the resumable state of the build. Read it first in a new session, then verify the claims
@@ -44,6 +45,11 @@ BLOCKED or PARTIALLY VERIFIED rather than claimed.
 | Real RTSP camera | BLOCKED | Needs authorized camera access + credentials (human decision) | Allowlist a trusted source, configure secrets, verify health/timeout/shutdown |
 | LLM-drafted analysis | NOT EXERCISED | `LLM_PROVIDER=none`, no key | Configure provider, validate structured output; deterministic path remains default |
 | Exposure-normalised hotspot rates | NOT IMPLEMENTED | No traffic-volume dataset; inventing one would be fabrication | Ingest volume counts, compute rates; UI states rates are not exposure-adjusted |
+| External datasets (AI City Track 4, RDD2022 India, BDD100K) | BLOCKED | Official sources return HTTP 403 (RDD), a Google Drive interstitial with no bytes (AI City) and a login/licence wall (BDD100K) | Save the archives to the paths in `docs/quality/DATASET_ACQUISITION_REPORT.md`, then run the `scripts/datasets/` pipeline |
+| Road-damage detection model | NOT IMPLEMENTED | No damage classifier exists; emitting guesses would be fabrication | Install/obtain an RDD-compatible model, then evaluate with `scripts/datasets/evaluate_models.py` |
+| Automated UI/a11y/load tests | NOT IMPLEMENTED | Playwright, axe and a load generator are not installed | Add `@axe-core/playwright` + a route sweep before any pilot |
+| Hosted Supabase project | BLOCKED (needs DSN) | No project credentials; the Supabase-shaped local instance is fully verified (migrations, RLS through the pooler, audit immutability, 12/12 smoke, SQL-only path) | Paste `SUPABASE_DB_URL` + `SUPABASE_POOLER_URL`, then run `scripts/supabase_setup.py --bootstrap --write-env --migrate` |
+| Supavisor / plan-specific behaviour | NOT VERIFIED | Local verification uses pgbouncer in transaction mode, not Supabase's Supavisor | Verify connection limits and pooler behaviour after the DSN is supplied |
 
 ## 3. Documentation gaps (reported, not fabricated)
 
@@ -141,7 +147,31 @@ multiple viewports, browser-level automated tests, dependency/container vulnerab
 - The login rate limiter is in-process; multi-replica deployments must move it to Redis.
 - Pipeline evidence is synthetic demo imagery and must never be presented as evidential photography.
 
-## 8. Next tasks (priority order)
+## 8. Endpoint audit, Supabase and dataset intake (22 November 2026)
+
+- **Every documented operation is executed.** `tests/integration/test_endpoint_coverage.py` walks the
+  real dependency chain and then diffs its own calls against `app.openapi()`. It fails if a documented
+  operation was never called, or if any call returned 5xx. The generated matrix is
+  `docs/ENDPOINT_AUDIT.md`: **82 operations across 69 paths** (the WebSocket is separate).
+- **Auth sweep.** A second test replays every operation with no session and fails on any 2xx outside
+  the five intentional pre-auth operations (health probes, static permission catalogue, CSRF
+  bootstrap cookie, idempotent logout).
+- **Supabase is supported, not yet live-verified.** `app/db/urls.py` normalises Supabase URLs, injects
+  TLS and disables named prepared statements behind the 6543 pooler; Alembic escapes `%` in generated
+  passwords; `scripts/supabase_setup.py` provisions/verifies extensions, the unprivileged
+  `roadguard_app` role, `search_path`, grants and the append-only audit revoke, writes `.env` and can
+  run migrations. Compose reads `COMPOSE_DATABASE_*_URL`. Runbook: `docs/SUPABASE.md`. The inspector
+  reports `[ok]` on every row against the bundled PostGIS container; **no Supabase project was
+  available in this environment**, so the live switch is the one outstanding step.
+- **Dataset intake.** `docs/DATASETS.md` records the public corpora and the finding that no open
+  Indian municipal fixed-CCTV accident corpus exists. `scripts/prepare_dataset.py` probes, hashes,
+  validates and optionally ingests operator footage through the normal upload flow.
+- **Test pack repaired.** Missing `db_engine` fixture, a class-scoped fixture, bare `Mock()` sessions,
+  a mangled test function and three incorrect rule scenarios were fixed; assertions were corrected to
+  the real contracts (204 for password change/logout, 415 for unsupported media, `pending → assigned →
+  in_progress`). The full suite passes and `ruff` is clean.
+
+## 9. Next tasks (priority order)
 
 1. Add a browser-level test (Playwright) for review → investigation → work order.
 2. Validate the YOLO adapter in a GPU image and record accuracy/runtime; keep `synthetic_scene`

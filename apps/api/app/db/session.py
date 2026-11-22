@@ -21,14 +21,30 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
+from app.db.urls import (
+    connect_args_for,
+    strip_driver_params,
+    validate_database_url,
+)
 
 _ENGINE_CACHE: dict[str, Engine] = {}
 
 
 def _make_engine(url: str) -> Engine:
+    # ``normalize_database_url`` accepts Supabase's plain ``postgresql://`` URIs;
+    # ``connect_args_for`` adds TLS and disables named prepared statements behind
+    # the transaction-mode pooler. Local containers keep working unchanged.
+    validate_database_url(url, ssl_mode=settings.database_ssl_mode)
     return create_engine(
-        url,
+        # ``strip_driver_params`` removes Prisma/Supabase hints such as
+        # ``?pgbouncer=true`` that libpq would reject as an unknown option.
+        strip_driver_params(url),
         pool_pre_ping=True,
+        connect_args=connect_args_for(
+            url,
+            ssl_mode=settings.database_ssl_mode,
+            connect_timeout=settings.database_connect_timeout_seconds,
+        ),
         pool_size=settings.database_pool_size,
         max_overflow=settings.database_pool_size,
         pool_recycle=1800,

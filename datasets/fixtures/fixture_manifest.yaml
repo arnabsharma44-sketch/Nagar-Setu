@@ -1,0 +1,16 @@
+# Fixture registry: same shape as datasets/manifest.yaml, tiny synthetic data.
+version: 1
+datasets:
+  rdd2022_india:
+    title: Fixture — RDD2022-format miniature
+    task: road_damage_detection
+    source_url: synthetic
+    archive_url: null
+    archive_name: RDD2022_India.zip
+    expected_bytes: 2864
+    license: Synthetic fixture, no third-party data.
+    access: fixture
+    root: datasets/fixtures/rdd2022_mini
+    raw_dir: raw
+    extract_to: extracted
+    annotations_glob: "**/annotations/xmls/*.xml"
