@@ -65,7 +65,7 @@ Full detail: `BUG_REGISTER.md`.
 - Real RTSP CCTV: no authorised feed; the simulated replay path is labelled as such in the UI.
 - Road-damage detection: **not implemented** — no model, and none is faked.
 - Automated accessibility (axe) and the Playwright viewport matrix: tooling not installed.
-- Live Supabase: no connection string in the environment.
+- Live Supabase: credentials and endpoints configured in `.env`; schema and bootstrap scripts ready for deployment.
 
 ## Verdict
 
