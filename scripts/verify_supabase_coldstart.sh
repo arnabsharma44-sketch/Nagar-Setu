@@ -34,8 +34,12 @@ PY="${PYTHON:-$ROOT/.venv/Scripts/python.exe}"
 LOG="${LOG:-/tmp/supabase-coldstart.log}"
 COMPOSE=(docker compose -f docker-compose.supabase.yml)
 DIRECT_URL="postgresql://postgres:postgres@127.0.0.1:5433/postgres?sslmode=require"
-APP_URL="postgresql://roadguard_app:roadguard_app_local_only@127.0.0.1:6543/postgres?sslmode=require&pgbouncer=true"
-APP_PASSWORD="roadguard_app_local_only"
+# Generated per run and never committed: the pooler userlist and the role password
+# are both derived from it. Nothing secret lives in tracked files.
+APP_PASSWORD="$("$PY" -c 'import secrets; print(secrets.token_urlsafe(24))')"
+export APP_PASSWORD
+export APP_DB_PASSWORD="$APP_PASSWORD"   # consumed by the compose `auth` service
+APP_URL="postgresql://roadguard_app:${APP_PASSWORD}@127.0.0.1:6543/postgres?sslmode=require&pgbouncer=true"
 
 export DATABASE_MIGRATION_URL="$DIRECT_URL"
 export DATABASE_APP_URL="$APP_URL"
@@ -69,7 +73,7 @@ run() {
     rm -rf "$ROOT/storage-supabase"
     mkdir -p "$ROOT/storage-supabase"
 
-    run "1. start the Supabase-shaped stack" "${COMPOSE[@]}" up -d
+    run "1. start the stack (auth file generated into a volume)" "${COMPOSE[@]}" up -d
     step "1b. wait for database health"
     for _ in $(seq 1 45); do
         [ "$(docker inspect -f '{{.State.Health.Status}}' roadguard-supabase-db 2>/dev/null)" = "healthy" ] && break
@@ -136,11 +140,20 @@ PY
     run "7. seed demo organisations and users" "$PY" scripts/seed_database.py
 
     step "8. isolation + database suites through the pooler"
-    tests_out="$("$PY" -m pytest tests/integration/test_database.py tests/integration/test_tenant_isolation.py -q -rs 2>&1)"
-    printf '%s\n' "$tests_out" | tail -6
-    if printf '%s' "$tests_out" | grep -q "SKIPPED"; then
-        fail "isolation suite skipped tests"
+    if ! "$PY" -m pytest tests/integration/test_database.py tests/integration/test_tenant_isolation.py \
+        -q -rs --junitxml="$LOG.junit.xml" > "$LOG.tests" 2>&1; then
+        tail -25 "$LOG.tests"
+        fail "isolation suite failed"
     fi
+    tail -4 "$LOG.tests"
+    "$PY" - "$LOG.junit.xml" <<'PY'
+import sys, xml.etree.ElementTree as ET
+suite = ET.parse(sys.argv[1]).getroot().find("testsuite")
+counts = {k: int(suite.get(k, 0)) for k in ("tests", "failures", "errors", "skipped")}
+print("isolation_suite", " ".join(f"{k}={v}" for k, v in counts.items()))
+if counts["skipped"] or counts["failures"] or counts["errors"]:
+    raise SystemExit("isolation suite was not skip-free and green")
+PY
 
     step "9. start API (pooler runtime URL)"
     ( cd "$ROOT/apps/api" && exec "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port 8001 ) \
@@ -176,11 +189,14 @@ PY
     SUPABASE_DB_URL="$DIRECT_URL" "$PY" scripts/supabase_setup.py \
         --url "$DIRECT_URL" --app-url "$APP_URL" --bootstrap
     "$PY" - <<'PY'
+import os
 import psycopg
-with psycopg.connect(
-    "postgresql://roadguard_app:roadguard_app_local_only@127.0.0.1:6543/postgres?sslmode=require",
-    connect_timeout=15,
-) as c:
+url = (
+    "postgresql://roadguard_app:"
+    + os.environ["APP_PASSWORD"]
+    + "@127.0.0.1:6543/postgres?sslmode=require"
+)
+with psycopg.connect(url, connect_timeout=15) as c:
     print("pooler login after bootstrap re-run ->", c.execute("select current_user").fetchone()[0])
 PY
 

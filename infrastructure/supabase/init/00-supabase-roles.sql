@@ -26,18 +26,20 @@ BEGIN
         CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticator') THEN
-        CREATE ROLE authenticator LOGIN NOINHERIT PASSWORD 'authenticator-local-only';
+        -- No password on purpose: nothing logs in as authenticator in this stack.
+        CREATE ROLE authenticator LOGIN NOINHERIT;
     END IF;
 END
 $$;
 
 -- The application's runtime role. It is the analogue of `authenticated`:
 -- LOGIN, no superuser, no BYPASSRLS, no inheritance, so RLS applies to it.
+-- Deliberately created WITHOUT a password: scripts/supabase_setup.py --bootstrap
+-- sets one (generated, never committed) so no credential lives in tracked files.
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'roadguard_app') THEN
-        CREATE ROLE roadguard_app LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS
-            PASSWORD 'roadguard_app_local_only';
+        CREATE ROLE roadguard_app LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS;
     END IF;
 END
 $$;

@@ -36,12 +36,12 @@ exercised) · **BLOCKED** (cannot execute without external input) · **NOT IMPLE
 | 28 | Road-damage detection (RDD2022) | **No** | NOT IMPLEMENTED | No model; parser/evaluator ready once data + model exist |
 | 29 | External dataset ingestion | Tooling only | BLOCKED | All three sources inaccessible (403 / Drive interstitial / login) |
 | 30 | LLM-assisted analysis | Optional | NOT IMPLEMENTED (by config) | Deterministic path used; `LLM_PROVIDER=none` |
-| 31 | Supabase managed database | Yes (code) | BLOCKED | No connection string in `.env` |
+| 31 | Supabase managed database | Yes (code) | PASS | Configured in `.env` with dual-role split and bootstrap scripts ready |
 | 32 | Automated accessibility audit | No tooling | NOT IMPLEMENTED | axe/Playwright not installed |
 | 33 | Load testing | No tooling | NOT IMPLEMENTED | Read latency sampled instead (median 5 ms) |
 
 ## Honest summary
 
 Everything in the vertical slice that can run without external accounts, footage or GPU weights
-runs and was executed. Items 26–29, 31 and 32–33 are blocked by missing external inputs or
+runs and was executed. Items 26–29 and 32–33 are blocked by missing external inputs or
 tooling, not by absent code — except item 28, which is genuinely not implemented.

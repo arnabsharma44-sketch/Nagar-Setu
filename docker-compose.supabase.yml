@@ -46,6 +46,22 @@ services:
     volumes:
       - pooler-certs:/certs
 
+  # One-shot: writes the pooler's auth file from APP_DB_PASSWORD into a named volume.
+  # Doing this in a volume (not a host bind mount) avoids Docker Desktop serving a
+  # stale copy of a file rewritten moments earlier, and keeps the password out of git.
+  auth:
+    image: postgis/postgis:16-3.4
+    container_name: roadguard-supabase-auth
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        printf '"roadguard_app" "%s"\n' "$APP_DB_PASSWORD" > /auth/userlist.txt &&
+        chmod 644 /auth/userlist.txt && echo "pooler auth file written"
+    environment:
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD (scripts/verify_supabase_coldstart.sh generates it)}
+    volumes:
+      - pooler-auth:/auth
+
   pooler:
     image: edoburu/pgbouncer:v1.23.1-p2
     container_name: roadguard-supabase-pooler
@@ -54,9 +70,11 @@ services:
         condition: service_healthy
       certs:
         condition: service_completed_successfully
+      auth:
+        condition: service_completed_successfully
     volumes:
       - ./infrastructure/supabase/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
-      - ./infrastructure/supabase/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+      - pooler-auth:/etc/pgbouncer/auth:ro
       - pooler-certs:/etc/pgbouncer/certs:ro
     ports:
       - "6543:6543"
@@ -66,3 +84,4 @@ services:
 volumes:
   supabase-db-data:
   pooler-certs:
+  pooler-auth:

@@ -1,15 +1,17 @@
-# Supabase cut-over runbook
+# Supabase runbook
 
-ROADGUARD AI runs on PostgreSQL 16 + PostGIS. Supabase is the supported managed target.
-The bundled PostGIS container remains the offline/dev fallback and keeps working unchanged.
+ROADGUARD AI runs on PostgreSQL 16 + PostGIS. Supabase is the supported managed target;
+the bundled PostGIS container remains the offline/dev fallback.
 
-**Status:** the entire cut-over has been executed and verified against a **local
-Supabase-shaped instance** — Supabase's role model, `extensions` schema, TLS-only
-connections, and a transaction pooler on port 6543. What has *not* happened is connecting
-to a hosted project, because that needs your project's DSN. Everything else is done.
+**Two different claims, kept apart:**
 
-Evidence with raw command output: `docs/SUPABASE_VERIFICATION.md`.
-Recreate the instance yourself: `docker compose -f docker-compose.supabase.yml up -d`.
+- **Proven locally, from erased containers and volumes:** the full switch — TLS, Supabase's
+  role model, migrations empty→head, RLS tenant isolation through a transaction pooler,
+  append-only audit, the 12-step workflow, and the SQL-only path.
+- **Unverified, pending your DSN:** everything that only a real hosted project can show —
+  Supavisor behaviour, plan connection limits, the network path, backups/PITR.
+
+Evidence, with the actual cold-start transcript: `docs/SUPABASE_VERIFICATION.md`.
 
 ---
 
@@ -17,44 +19,92 @@ Recreate the instance yourself: `docker compose -f docker-compose.supabase.yml u
 
 | Variable | Connection | Port | Used by |
 | --- | --- | --- | --- |
-| `SUPABASE_DB_URL` | Direct or session pooler, TLS required | 5432 | The setup script, Alembic, seeding, `demo_smoke.py` |
-| `DATABASE_MIGRATION_URL` | Same as above | 5432 | Alembic, `seed_database.py`, privileged lookups |
+| `SUPABASE_DB_URL` | Direct or session pooler, TLS required | 5432 | Setup script, Alembic, seeding, smoke |
+| `DATABASE_MIGRATION_URL` | Same as above | 5432 | Alembic, `seed_database.py` |
 | `SUPABASE_POOLER_URL` / `DATABASE_APP_URL` | **Transaction pooler**, TLS required | 6543 | API and worker at runtime |
 | `COMPOSE_DATABASE_MIGRATION_URL` | Container view of the direct URL | 5432 | `api`/`worker` containers |
 | `COMPOSE_DATABASE_APP_URL` | Container view of the pooler URL | 6543 | `api`/`worker` containers |
 
-Paste the strings from **Supabase → Project → Connect**:
+From **Supabase → Project → Connect**:
 
-- *Connection pooling → Transaction* → the `…pooler.supabase.com:6543` string. This is the
-  runtime URL; it may include `?pgbouncer=true`.
-- *Direct connection* → `db.<ref>.supabase.co:5432`. This is the migration URL.
+- *Connection pooling → Transaction*: `…pooler.supabase.com:6543`, may include
+  `?pgbouncer=true`. **Runtime only.**
+- *Direct connection*: `db.<ref>.supabase.co:5432`. **Migrations only.**
 
-Never put the direct URL in the runtime slot under load: a serverless/container fleet will
-exhaust Postgres connections. Never put the pooler URL in the migration slot: DDL cannot
-survive transaction multiplexing (the app now refuses this explicitly).
-
----
-
-## 2. Role model, and how the app maps onto it
-
-| Supabase role | Behaviour | ROADGUARD use |
-| --- | --- | --- |
-| `postgres` | Owner, `BYPASSRLS` | Migrations and seeding only (`DATABASE_MIGRATION_URL`). Never the runtime role — RLS would silently stop applying. |
-| `service_role` | `BYPASSRLS`, server key | Not used. Reserved for maintenance jobs that genuinely need to cross tenants. |
-| `authenticated` | Client role, RLS-bound | Not used by this app; the browser never talks to Postgres. |
-| `anon` | Client role, no privileges | Not used. |
-| **`roadguard_app`** | LOGIN, `NOSUPERUSER NOBYPASSRLS NOINHERIT` | **The runtime role.** Conceptually the server-side equivalent of `authenticated`: every query is filtered by RLS using `app.current_organization_id`. |
-
-`python scripts/supabase_setup.py --bootstrap` creates/hardens `roadguard_app`, grants
-current **and future** objects (default privileges), sets its `search_path` to include
-`extensions`, and re-revokes `UPDATE`/`DELETE`/`TRUNCATE` on `audit_logs` on every run.
+Never invert them: the pooler cannot hold DDL across statements (the app now refuses), and
+the direct URL under a container fleet exhausts Postgres connections.
 
 ---
 
-## 3. Cut-over (the only steps left for you)
+## 2. Cold start, local Supabase-shaped stack (proven)
 
-1. Create the project, wait for it to be healthy, and copy both connection strings.
-2. Put them in `.env` (never in chat):
+Requires Docker and the project virtualenv. This destroys **only** the `roadguard-supabase`
+project's containers and volumes; the dev stack (`docker-compose.yml`) is untouched.
+
+```bash
+docker compose -f docker-compose.supabase.yml down -v
+bash scripts/verify_supabase_coldstart.sh
+```
+
+That is the whole procedure — no manual fixes, no reordering. The script performs, in order:
+
+1. `down -v` plus removal of leftover containers and local runtime storage.
+2. `up -d`, then waits for database health (the `certs` one-shot must finish before the
+   pooler starts; Compose's `service_completed_successfully` enforces that).
+3. Proves TLS is required (a `sslmode=disable` attempt is refused) and that the Supabase role
+   set exists: `anon`/`authenticated` NOLOGIN, `service_role` BYPASSRLS, `roadguard_app`
+   LOGIN without superuser/BYPASSRLS.
+4. Bootstraps the runtime role over the **direct** URL with a fixed local app password that
+   matches the pooler's userlist.
+5. Migrates empty → head over the direct URL.
+6. Runs Alembic a second time and **fails if any migration reapplies**.
+7. Prints the schema/RLS/audit facts from the database.
+8. Seeds both demo organisations, including one full workflow graph (incident, evidence,
+   video, job, investigation, work order) so the isolation suite cannot skip.
+9. Runs `test_database.py` + `test_tenant_isolation.py` through the pooler with a JUnit
+   assertion that **skipped = 0**.
+10. Starts the API on the pooler URL, then a **separate external worker**, and runs the
+    12-step workflow.
+11. Re-runs bootstrap *without* a password and then logs in through the pooler — the
+    stale-credential regression check.
+12. Loads `infrastructure/supabase/schema.sql` into a brand-new database and checks it.
+
+Success ends with `=== COLD START PASS ===` and leaves the stack running:
+
+| Endpoint | Value |
+| --- | --- |
+| Direct Postgres | `127.0.0.1:5433`, user `postgres`, TLS required |
+| Transaction pooler | `127.0.0.1:6543`, user `roadguard_app`, TLS required |
+| App runtime URL | `postgresql://roadguard_app:<generated>@127.0.0.1:6543/postgres?sslmode=require&pgbouncer=true` |
+
+The **app-role password is generated on every cold run** and written only to
+`infrastructure/supabase/pgbouncer/userlist.txt`, which git ignores. No credential for the
+runtime role exists in tracked files. The `postgres` superuser keeps the throwaway local
+default from the compose file; both endpoints bind to localhost and must never be exposed or
+reused on a hosted project. The script does not touch `.env`, so the dev path keeps its own
+database.
+
+To read the generated password when connecting by hand:
+
+```bash
+cat infrastructure/supabase/pgbouncer/userlist.txt   # ignored, local only
+```
+
+Stop it with:
+
+```bash
+docker compose -f docker-compose.supabase.yml down        # add -v to erase the data too
+```
+
+---
+
+## 3. Cut over a hosted project (UNVERIFIED — needs your DSN)
+
+This is the one step that cannot be executed here. Nothing below has been run against a
+hosted Supabase project.
+
+1. Create the project, wait until healthy, copy both connection strings from Connect.
+2. Put them in `.env` (never in chat or a commit):
 
 ```dotenv
 SUPABASE_DB_URL=postgresql://postgres:<pw>@db.<ref>.supabase.co:5432/postgres?sslmode=require
@@ -62,7 +112,7 @@ SUPABASE_POOLER_URL=postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supab
 DATABASE_SSL_MODE=require
 ```
 
-3. Run the whole cut-over in one command:
+3. Bootstrap, write `.env`, and migrate in one command:
 
 ```bash
 python scripts/supabase_setup.py \
@@ -71,22 +121,25 @@ python scripts/supabase_setup.py \
   --bootstrap --write-env --migrate
 ```
 
-   It prints a redacted URL, inspects the project, bootstraps, rewrites `.env`
-   (`DATABASE_*`, `COMPOSE_DATABASE_*`), and runs `alembic upgrade head` over the direct
-   connection. The app-role password is generated and never echoed.
+   The app-role password is generated on first creation and never printed. **A later run
+   without `--app-password` leaves it unchanged**, so re-running bootstrap cannot lock the
+   pooler out. To rotate deliberately, pass `--app-password` and then reload/restart the
+   pooler.
+
 4. Verify:
 
 ```bash
 python scripts/supabase_setup.py --url "$SUPABASE_DB_URL"
-python -m pytest tests/integration/test_database.py tests/integration/test_tenant_isolation.py
+python -m pytest tests/integration/test_database.py tests/integration/test_tenant_isolation.py -rs
 python scripts/demo_smoke.py --external-worker
 ```
 
-   Expect `[ok]` on every inspection row, 23 RLS tables / 23 policies, and 12/12 smoke steps.
-5. Point the containers at it:
+   Expect every `[ok]` row, 23 RLS tables / 23 policies, zero skips, 12/12 steps.
+
+5. Point containers at it (no local `postgres` service):
 
 ```bash
-docker compose up -d --build api worker web redis minio minio-init   # no postgres service
+docker compose up -d --build api worker web redis minio minio-init
 ```
 
 ### SQL-Editor-only path (no Python on the project)
@@ -97,63 +150,47 @@ docker compose up -d --build api worker web redis minio minio-init   # no postgr
 3. infrastructure/supabase/verify.sql             (read-only checks)
 ```
 
-Replace `CHANGE_ME_STRONG_PASSWORD` in the bootstrap first. `schema.sql` is generated from a
-database migrated to head on a Supabase-shaped instance and was loaded into a fresh database
-during verification (24 tables, 23 RLS tables, 23 policies, audit DML revoked).
+Replace `CHANGE_ME_STRONG_PASSWORD` first. `schema.sql` is generated from a database migrated
+to head and is proven locally by loading it into a fresh database.
 
 ---
 
-## 4. Failure modes you will actually hit
+## 4. Role model
+
+| Supabase role | Behaviour | ROADGUARD use |
+| --- | --- | --- |
+| `postgres` | Owner, BYPASSRLS | Migrations and seeding only. Never runtime — RLS would stop applying. |
+| `service_role` | BYPASSRLS | Not used; reserved for cross-tenant maintenance. |
+| `authenticated` | Client role, RLS-bound | Not used; the browser never talks to Postgres. |
+| `anon` | No privileges | Not used. |
+| **`roadguard_app`** | LOGIN, NOSUPERUSER, NOBYPASSRLS, NOINHERIT | **Runtime role.** Queries are filtered by RLS on `app.current_organization_id`. |
+
+`--bootstrap` creates/hardens `roadguard_app`, grants current and future objects, extends
+`search_path` with `extensions`, and re-revokes `UPDATE`/`DELETE`/`TRUNCATE` on `audit_logs`
+on every run.
+
+---
+
+## 5. Failure modes
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `Refusing to connect without TLS: … requires sslmode=require` | URL lacks TLS | Add `?sslmode=require`; the loader refuses rather than silently downgrading. |
-| `invalid connection option "pgbouncer"` | Prisma-style `?pgbouncer=true` reaches libpq | Already fixed: the loader reads and strips it. If you see this on an old build, upgrade. |
-| `prepared statement "_pg3_0" already exists` | Automatic prepared statements through the transaction pooler | Already fixed: port 6543 or `pgbouncer=true` sets `prepare_threshold=None`. |
-| `Migrations must use a direct/session connection` | Pooler URL in `DATABASE_MIGRATION_URL` | Use the 5432 string for migrations; keep 6543 for runtime. |
-| `pgbouncer=true was set on a non-pooler URL (port 5432)` | Flag on a direct URL | Remove the flag or use the pooler. |
-| `server login has been failing, try again later` after rotating the app password | pgbouncer caches the failed server login | Re-run bootstrap with the same `--app-password`, then restart/reload the pooler (or wait ~15 s). |
-| `remaining connection slots are reserved` | Too many direct connections | Use the pooler for runtime; lower `DATABASE_POOL_SIZE`. |
-| RLS "works" but tenants see everything | Using `postgres` at runtime | Use `roadguard_app`; `postgres` has `BYPASSRLS`. |
+| `Refusing to connect without TLS` | URL lacks TLS | Add `?sslmode=require`. |
+| `invalid connection option "pgbouncer"` | `?pgbouncer=true` reached libpq | Already fixed (stripped before libpq). |
+| `prepared statement "_pg3_0" already exists` | Auto-prepared statements on the transaction pooler | Already fixed (`prepare_threshold=None` on 6543). |
+| `Migrations must use a direct/session connection` | Pooler URL in the migration slot | Use 5432 for Alembic. |
+| `pgbouncer=true was set on a non-pooler URL` | Flag on a 5432 URL | Remove it or use the pooler. |
+| `server login has been failing, try again later` | Password rotated out-of-band into a live pooler | Reload/restart the pooler, or wait ~15 s. Bootstrap no longer rotates on re-run. |
+| `remaining connection slots are reserved` | Too many direct connections | Runtime uses the pooler; lower `DATABASE_POOL_SIZE`. |
+| Tenants see everything | Runtime uses `postgres` | Use `roadguard_app`; `postgres` bypasses RLS. |
 
 ---
 
-## 5. Local Supabase-shaped verification stack
+## 6. Scope of the proof
 
-```bash
-docker compose -f docker-compose.supabase.yml up -d     # 5433 direct, 6543 pooler
-```
+Reproduced locally: Supabase role names and attributes, `extensions` schema, TLS
+enforcement, transaction pooling with prepared-statement behaviour, RLS through the pooler,
+append-only audit, migration idempotency, and the SQL-only install.
 
-- `postgis/postgis:16-3.4`, database `postgres`, superuser `postgres`.
-- `anon`, `authenticated` (NOLOGIN), `service_role` (BYPASSRLS, NOLOGIN), `authenticator`
-  (LOGIN NOINHERIT), and `roadguard_app` (LOGIN, NOBYPASSRLS, NOINHERIT, member of
-  `authenticated`).
-- PostGIS + pgcrypto in an `extensions` schema; database `search_path` includes it.
-- TLS on with a generated certificate; `pg_hba` **rejects non-TLS TCP**.
-- pgbouncer in `transaction` mode on 6543, TLS on both legs.
-
-Local-only passwords are `postgres` and `roadguard_app_local_only`; certificates live in a
-Docker volume. Nothing here is used on a hosted project.
-
-What this stack does **not** reproduce: Supavisor's exact protocol handling, connection
-limits by plan, PITR/backups, the Supabase dashboard/Auth/Storage APIs, or the project's
-network path. Those are the residual risks that only your DSN can retire.
-
----
-
-## 6. What was proven locally (short form)
-
-| Check | Result |
-| --- | --- |
-| TLS required, plaintext rejected | `ssl=True`; `sslmode=disable` → `pg_hba.conf rejects connection` |
-| Roles | `anon`/`authenticated` NOLOGIN, `service_role` BYPASSRLS, `roadguard_app` login + no bypass |
-| Migrations from empty | 3 revisions → `837c7ef69730 (head)`, 0 errors |
-| Idempotent re-run | second `upgrade head` → no upgrade lines, exit 0 |
-| Schema | 24 tables, 23 RLS tables, 23 policies (all referencing `current_organization_id`), 60 FKs, 119 indexes, 2 functions, 1 trigger, 4 geography columns |
-| Audit immutability | `UPDATE`/`DELETE` denied to `roadguard_app`; `SELECT`/`INSERT` allowed |
-| Cross-tenant reads | org A sees 3 own cameras, 0 of org B, 0 with no tenant context |
-| Cross-tenant write | `new row violates row-level security policy`, 0 rows persisted |
-| Isolation suite through pooler | 18 passed, 0 skipped, exit 0 |
-| External-worker workflow | 12/12 steps, `OK: full workflow completed end to end.` |
-| SQL-only path | fresh database → 24 tables, 23 policies, head pinned, audit DML revoked |
-| Unsafe URL combos | all refused with actionable messages |
+Not reproducible without a hosted project: **Supavisor** (the local stack uses pgbouncer),
+plan connection limits, actual network latency/firewall behaviour, and backups/PITR.

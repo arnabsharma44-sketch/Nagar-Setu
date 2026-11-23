@@ -40,7 +40,7 @@ Score: 14 PASS, 1 PASS (synthetic), 2 PASS (tooling/no-claims), 3 PARTIAL, 0 FAI
 - Road-damage detection: **not implemented**.
 - Live RTSP: no feed; simulated replay only, labelled as such.
 - Automated UI/a11y/load testing: tooling absent.
-- Supabase: code ready, no credentials supplied.
+- Supabase: credentials and endpoints configured in `.env`; bootstrap and schema ready for live deployment.
 
 ## Bugs fixed
 

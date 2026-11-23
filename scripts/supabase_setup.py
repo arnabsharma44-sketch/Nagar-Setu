@@ -362,7 +362,20 @@ def main(argv: list[str] | None = None) -> int:
             role_exists = scalar(
                 conn, "select 1 from pg_roles where rolname = %s", (args.app_user,)
             )
-            if not role_exists and app_password is None:
+            role_has_password = (
+                bool(
+                    scalar(
+                        conn,
+                        "select rolpassword is not null from pg_roles where rolname = %s",
+                        (args.app_user,),
+                    )
+                )
+                if role_exists
+                else False
+            )
+            # Generate only when there is nothing usable to keep: a new role, or one
+            # created without a password (the local init SQL does that deliberately).
+            if app_password is None and not role_has_password:
                 app_password = secrets.token_urlsafe(24)
             rows = inspect(conn, args.app_user, host=host_of(migration_url))
             width = max(len(label) for label, _, _ in rows)
