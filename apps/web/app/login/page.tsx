@@ -5,6 +5,8 @@ import { Suspense, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { Session } from "@/lib/types";
 
+const DEMO_PASSWORD = "RoadguardDemo#2026";
+
 const DEMO_ACCOUNTS = [
   ["ops@demo.roadguard.ai", "Operations administrator"],
   ["reviewer@demo.roadguard.ai", "Event reviewer / verifier"],
@@ -103,22 +105,28 @@ function LoginForm() {
         </form>
 
         <div className="mt-5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-          <p className="text-xs font-semibold text-amber-200">DEMO ENVIRONMENT</p>
-          <p className="mt-1 text-xs text-amber-100/80">
-            Synthetic data only. Seed accounts use the password from{" "}
-            <code className="rounded bg-black/30 px-1">DEMO_SEED_PASSWORD</code>.
+          <p className="text-xs font-semibold text-amber-200">DEMO CREDENTIALS</p>
+          <p className="mt-1 text-xs text-amber-100/90">
+            Password: <code className="rounded bg-black/40 px-1.5 py-0.5 font-mono font-medium text-amber-300">RoadguardDemo#2026</code>
           </p>
-          <ul className="mt-2 space-y-1 text-xs text-amber-100/80">
+          <p className="mt-1 text-xs text-amber-100/70">
+            Click any account below to autofill both email & password:
+          </p>
+          <ul className="mt-2.5 space-y-1.5 text-xs text-amber-100/90">
             {DEMO_ACCOUNTS.map(([account, role]) => (
-              <li key={account}>
+              <li key={account} className="flex items-center justify-between">
                 <button
                   type="button"
-                  className="underline decoration-dotted"
-                  onClick={() => setEmail(account)}
+                  className="rounded px-1.5 py-0.5 text-left font-mono underline decoration-dotted hover:bg-amber-400/10 hover:text-amber-200"
+                  onClick={() => {
+                    setEmail(account);
+                    setPassword(DEMO_PASSWORD);
+                    setError(null);
+                  }}
                 >
                   {account}
-                </button>{" "}
-                — {role}
+                </button>
+                <span className="text-slate-400 text-[11px]">{role}</span>
               </li>
             ))}
           </ul>
