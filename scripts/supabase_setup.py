@@ -179,10 +179,15 @@ def bootstrap(conn: psycopg.Connection, app_user: str, app_password: str | None)
             if app_password is not None
             else sql.SQL("")
         )
+        is_super = bool(
+            scalar(conn, "select rolsuper from pg_roles where rolname = current_user")
+        )
+        super_clause = " nosuperuser" if is_super else ""
         cur.execute(
             sql.SQL(
-                "alter role {} with login{} "
-                "nosuperuser nobypassrls nocreatedb nocreaterole noinherit"
+                "alter role {} with login{}"
+                + super_clause
+                + " nobypassrls nocreatedb nocreaterole noinherit"
             ).format(sql.Identifier(app_user), password_clause)
         )
         actions.append(
@@ -419,7 +424,7 @@ def main(argv: list[str] | None = None) -> int:
                 "\nApp role password unchanged. Pass --app-url with the existing runtime URL, "
                 "or --app-password to rotate it (then reload the connection pooler)."
             )
-        if is_transaction_pooler(app_url):
+        if app_url and is_transaction_pooler(app_url):
             print("info: pooler detected — named prepared statements are disabled automatically.")
         if args.write_env and app_url is None:
             print(

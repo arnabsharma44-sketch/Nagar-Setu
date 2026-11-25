@@ -173,7 +173,7 @@ def _fail(job_id: uuid.UUID, organization_id: uuid.UUID, code: str, message: str
             job.lease_expires_at = None
         else:
             job.status = JobStatus.FAILED
-            job.stage = JobStage.FAILED
+            job.stage = JobStage.COMPLETED
             job.completed_at = datetime.now(UTC)
             job.lease_owner = None
             job.lease_expires_at = None
