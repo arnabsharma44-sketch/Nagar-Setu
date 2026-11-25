@@ -87,17 +87,30 @@ export function AppShell({
               );
             })}
           </nav>
-          <div className="mt-auto space-y-2 px-2 pb-2 pt-6">
+          <div className="mt-auto space-y-2 px-2 pb-2 pt-6 border-t border-opacity-50">
             <Link
               href={tone === "command" ? "/admin" : "/command"}
               className={`block rounded-lg px-3 py-2 text-xs font-medium ${
                 tone === "command"
-                  ? "bg-[#131e2c] text-sky-300 hover:bg-[#1a2837]"
-                  : "bg-slate-100 text-blue-800 hover:bg-slate-200"
+                  ? "bg-[#131e2c] text-sky-300 hover:bg-[#1a2837] border border-[#243449]"
+                  : "bg-slate-100 text-blue-800 hover:bg-slate-200 border border-slate-200"
               }`}
             >
               {tone === "command" ? "Open Administrative Portal →" : "← Back to Command Center"}
             </Link>
+            {session && (
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className={`w-full rounded-lg px-3 py-2 text-xs font-medium text-left ${
+                  tone === "command"
+                    ? "border border-[#243449] text-slate-300 hover:bg-[#131e2c]"
+                    : "border border-slate-300 text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                Sign out
+              </button>
+            )}
             <p className={`text-[11px] ${tone === "command" ? "text-slate-500" : "text-slate-500"}`}>
               Prototype · human review required for every official decision.
             </p>
@@ -149,12 +162,12 @@ export function AppShell({
                 ) : null}
               </div>
             </div>
-            <nav aria-label="mobile navigation" className="flex gap-1 overflow-x-auto px-3 pb-2 lg:hidden">
+            <nav aria-label="mobile navigation" className="flex flex-col lg:hidden gap-2 p-3 border-t border-opacity-50">
               {nav.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`whitespace-nowrap rounded-full px-3 py-1 text-xs ${
+                  className={`whitespace-nowrap rounded-full px-3 py-2 text-sm ${
                     pathname === item.href || pathname.startsWith(item.href + "/")
                       ? tone === "command"
                         ? "bg-sky-500/20 text-sky-200"
@@ -167,6 +180,19 @@ export function AppShell({
                   {item.label}
                 </Link>
               ))}
+              {session && (
+                <button
+                  type="button"
+                  onClick={() => void signOut()}
+                  className={`w-full rounded-lg px-3 py-2 text-sm font-medium text-left ${
+                    tone === "command"
+                      ? "border border-[#243449] text-slate-300 hover:bg-[#131e2c]"
+                      : "border border-slate-300 text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  Sign out
+                </button>
+              )}
             </nav>
           </header>
           <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5">

@@ -78,6 +78,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     [session, meta, loading, error, load, signOut],
   );
 
+  // Don't render children until session is loaded to prevent permission flashes
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--command-bg)" }}>
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="w-10 h-10 border-4 border-sky-400/30 border-t-sky-400 rounded-full animate-spin" />
+          <p className="text-slate-400 text-sm">Loading session…</p>
+        </div>
+      </div>
+    );
+  }
+
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 
